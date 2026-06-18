@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Bass TAB Editor</title>
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/print.css" media="print">
+</head>
+<body>
+
+  <!-- ── Header ───────────────────────────────── -->
+  <header id="header">
+    <input id="title-input" type="text" value="無題" maxlength="64" spellcheck="false" aria-label="曲タイトル">
+    <button class="header-btn" id="btn-export-png" title="PNG保存">↓</button>
+    <button class="header-btn" id="btn-print"      title="印刷 / PDF">⎙</button>
+  </header>
+
+  <!-- ── Score area (VexFlow SVG goes here) ───── -->
+  <main id="score-area">
+    <div id="score-canvas"></div>
+  </main>
+
+  <!-- ── Input panel ──────────────────────────── -->
+  <div id="input-panel">
+
+    <!-- 音符の長さ選択 -->
+    <div id="duration-row">
+      <button class="dur-btn"            data-duration="w"  >全</button>
+      <button class="dur-btn"            data-duration="h"  >2分</button>
+      <button class="dur-btn active"     data-duration="q"  >4分</button>
+      <button class="dur-btn"            data-duration="8"  >8分</button>
+      <button class="dur-btn"            data-duration="16" >16分</button>
+      <button class="dur-btn dotted-btn" id="btn-dotted"    >付点</button>
+      <button class="dur-btn"            id="btn-rest"      >休符</button>
+    </div>
+
+    <!-- フレット入力の表示 -->
+    <div id="fret-display" class="idle">弦をタップして入力</div>
+
+    <!-- テンキー -->
+    <div id="numpad">
+      <button class="num-btn" data-digit="1">1</button>
+      <button class="num-btn" data-digit="2">2</button>
+      <button class="num-btn" data-digit="3">3</button>
+      <button class="num-btn" data-digit="4">4</button>
+      <button class="num-btn" data-digit="5">5</button>
+      <button class="num-btn" data-digit="6">6</button>
+      <button class="num-btn" data-digit="7">7</button>
+      <button class="num-btn" data-digit="8">8</button>
+      <button class="num-btn" data-digit="9">9</button>
+      <button class="num-btn backspace"   id="btn-backspace">⌫</button>
+      <button class="num-btn"             data-digit="0">0</button>
+      <button class="num-btn confirm"     id="btn-confirm">✓</button>
+    </div>
+
+    <!-- 奏法記号 -->
+    <div id="technique-row">
+      <button class="tech-btn disabled" data-technique="H" >H</button>
+      <button class="tech-btn disabled" data-technique="P" >P</button>
+      <button class="tech-btn disabled" data-technique="S" >S</button>
+      <button class="tech-btn disabled" data-technique="B" >B</button>
+      <button class="tech-btn disabled" data-technique="PM">PM</button>
+      <button class="tech-btn disabled" data-technique="X" >X</button>
+    </div>
+
+  </div>
+
+  <!-- VexFlow (UMD build — adds global Vex) -->
+  <script src="https://cdn.jsdelivr.net/npm/vexflow@4/build/vexflow.js"></script>
+  <script type="module" src="js/app.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,8 @@
+@media print {
+  #header      { display: none; }
+  #input-panel { display: none; }
+
+  body         { height: auto; overflow: visible; background: #fff; }
+  #score-area  { overflow: visible; width: 100%; height: auto; }
+  #score-canvas { min-width: unset; }
+}
