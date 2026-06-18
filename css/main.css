@@ -24,7 +24,7 @@ body {
   font-family: system-ui, -apple-system, sans-serif;
   background: var(--bg-dark);
   color: var(--text);
-  touch-action: none;
+  /* touch-action is set per-zone: pan-x on score-area, manipulation on buttons */
 }
 
 /* ── Header ─────────────────────────────────────── */
@@ -80,7 +80,7 @@ body {
 #score-canvas {
   display: inline-block;
   min-width: 100%;
-  height: 100%;
+  /* height is determined by VexFlow SVG; do not force 100% */
 }
 
 /* ── Input panel ─────────────────────────────────── */
@@ -115,6 +115,7 @@ body {
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
+  touch-action: manipulation;
   transition: background 0.1s;
 }
 
@@ -161,6 +162,7 @@ body {
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
+  touch-action: manipulation; /* prevents double-tap zoom on buttons */
 }
 
 .num-btn:active      { background: var(--bg-darker); }
@@ -189,6 +191,7 @@ body {
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
+  touch-action: manipulation;
 }
 
 .tech-btn.active {

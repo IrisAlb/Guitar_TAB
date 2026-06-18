@@ -1,4 +1,4 @@
-import { Score, Measure, Note, deserializeScore } from './model.js';
+import { Score, Measure, Note, deserializeScore, MAX_FRET } from './model.js';
 
 const STORAGE_KEY = 'bass_tab_v1';
 const UNDO_LIMIT  = 50;
@@ -108,7 +108,7 @@ function handleAction({ type, payload = {} }) {
       if (!state.input.awaitingFret) break;
       const next = state.input.pendingFret + payload.digit;
       const num  = Number(next);
-      if (next.length <= 2 && num >= 0 && num <= 24) {
+      if (next.length <= 2 && num >= 0 && num <= MAX_FRET) {
         state.input.pendingFret = next;
       }
       break;
@@ -121,6 +121,10 @@ function handleAction({ type, payload = {} }) {
 
     case 'CONFIRM_FRET': {
       if (!state.input.awaitingFret) break;
+      if (state.input.targetString < 0 || state.input.targetString > 3) {
+        resetFretInput();
+        break;
+      }
       const fret = state.input.pendingFret === ''
         ? 0
         : parseInt(state.input.pendingFret, 10);
@@ -223,6 +227,14 @@ function handleAction({ type, payload = {} }) {
     case 'UNDO': {
       if (undoStack.length === 0) break;
       state.score = deserializeScore(JSON.parse(undoStack.pop()));
+      // Clamp cursor and clear selection since the score structure may have changed
+      if (state.cursor.measureIndex >= state.score.measures.length) {
+        state.cursor.measureIndex = state.score.measures.length - 1;
+        state.cursor.beatTick     = 0;
+      }
+      state.selection.measureIndex = -1;
+      state.selection.noteIndex    = -1;
+      resetFretInput();
       break;
     }
 

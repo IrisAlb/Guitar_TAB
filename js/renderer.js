@@ -60,12 +60,15 @@ function renderMeasure(ctx, V, measure, x, width, isFirst) {
 
   const { beats, value } = measure.timeSignature;
 
+  // Voice.Mode.SOFT (numeric 2) allows partially-filled measures during editing
+  const SOFT = V.Voice.Mode?.SOFT ?? 2;
+
   const sv = new V.Voice({ num_beats: beats, beat_value: value });
-  sv.setMode(V.Voice.Mode.SOFT);   // allow partially-filled measures during editing
+  sv.setMode(SOFT);
   sv.addTickables(staveNotes);
 
   const tv = new V.Voice({ num_beats: beats, beat_value: value });
-  tv.setMode(V.Voice.Mode.SOFT);
+  tv.setMode(SOFT);
   tv.addTickables(tabNotes);
 
   // noteW: available space for notes (subtract clef/timesig area on first measure)
@@ -109,8 +112,8 @@ function toStaveNote(note, V) {
 
 function toTabNote(note, V) {
   if (note.isRest) {
-    // GhostNote: invisible spacer to keep TAB timing aligned with standard notation
-    return new V.GhostNote({ duration: note.vexDuration });
+    // GhostNote keeps TAB timing aligned; string-form constructor is the safe API in VexFlow 4.x
+    return new V.GhostNote(note.vexDuration);
   }
 
   // Our string 0 = E (lowest, bottom TAB line) → VexFlow str 4 (4-string, 1-indexed from top)
