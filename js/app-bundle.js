@@ -391,10 +391,28 @@
   function attachTapHandler(container) {
     const svg = container.querySelector("svg");
     if (!svg || renderedMeasures.length === 0) return;
+    svg.style.cursor = "pointer";
+    let tapStart = null;
+    svg.addEventListener("touchstart", (e) => {
+      tapStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }, { passive: true });
+    svg.addEventListener("touchend", (e) => {
+      if (!tapStart) return;
+      const t = e.changedTouches[0];
+      const dx = Math.abs(t.clientX - tapStart.x);
+      const dy = Math.abs(t.clientY - tapStart.y);
+      tapStart = null;
+      if (dx > 10 || dy > 10) return;
+      e.preventDefault();
+      handleTap(t.clientX, t.clientY);
+    }, { passive: false });
     svg.addEventListener("click", (e) => {
+      handleTap(e.clientX, e.clientY);
+    });
+    function handleTap(clientX, clientY) {
       const rect = svg.getBoundingClientRect();
-      const svgX = e.clientX - rect.left;
-      const svgY = e.clientY - rect.top;
+      const svgX = clientX - rect.left;
+      const svgY = clientY - rect.top;
       const found = renderedMeasures.find((m) => svgX >= m.x && svgX < m.x + m.width);
       if (!found || !found.tabStave) return;
       let lineYs;
@@ -418,7 +436,7 @@
       });
       const ourString = NUM_STRINGS - 1 - closestIdx;
       dispatch({ type: "TAP_STRING", payload: { string: ourString } });
-    });
+    }
   }
 
   // js/ui.js

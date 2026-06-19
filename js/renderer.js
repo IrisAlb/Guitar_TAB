@@ -129,21 +129,48 @@ function attachTapHandler(container) {
   const svg = container.querySelector('svg');
   if (!svg || renderedMeasures.length === 0) return;
 
+  // iOS Safari does not fire click on SVG elements unless cursor:pointer is set.
+  // Set it explicitly so both click and touch events reach the element.
+  svg.style.cursor = 'pointer';
+
+  let tapStart = null;
+
+  // Record touch start position to distinguish tap from scroll
+  svg.addEventListener('touchstart', (e) => {
+    tapStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  }, { passive: true });
+
+  // touchend is reliable on iOS Safari regardless of cursor/clickability rules
+  svg.addEventListener('touchend', (e) => {
+    if (!tapStart) return;
+    const t  = e.changedTouches[0];
+    const dx = Math.abs(t.clientX - tapStart.x);
+    const dy = Math.abs(t.clientY - tapStart.y);
+    tapStart = null;
+    if (dx > 10 || dy > 10) return; // finger moved — was a scroll, not a tap
+    e.preventDefault(); // suppress the subsequent synthetic click
+    handleTap(t.clientX, t.clientY);
+  }, { passive: false });
+
+  // Desktop mouse fallback
   svg.addEventListener('click', (e) => {
+    handleTap(e.clientX, e.clientY);
+  });
+
+  function handleTap(clientX, clientY) {
     const rect = svg.getBoundingClientRect();
-    const svgX  = e.clientX - rect.left;
-    const svgY  = e.clientY - rect.top;
+    const svgX = clientX - rect.left;
+    const svgY = clientY - rect.top;
 
     // Which measure?
     const found = renderedMeasures.find(m => svgX >= m.x && svgX < m.x + m.width);
     if (!found || !found.tabStave) return;
 
-    // Get actual y positions of each TAB string from VexFlow
+    // TAB string y-positions from VexFlow (fallback: 13px spacing, +1 unit top margin)
     let lineYs;
     try {
       lineYs = Array.from({ length: NUM_STRINGS }, (_, i) => found.tabStave.getYForLine(i));
     } catch {
-      // Fallback: default TabStave spacing is 13px, top_text_position adds one unit
       lineYs = Array.from({ length: NUM_STRINGS }, (_, i) => TAB_Y + (i + 1) * 13);
     }
 
@@ -151,10 +178,8 @@ function attachTapHandler(container) {
     const topY    = lineYs[0] - spacing;
     const bottomY = lineYs[NUM_STRINGS - 1] + spacing;
 
-    // Only respond to taps inside the TAB stave area
     if (svgY < topY || svgY > bottomY) return;
 
-    // Closest string line
     let closestIdx = 0;
     let minDist    = Infinity;
     lineYs.forEach((y, i) => {
@@ -162,9 +187,8 @@ function attachTapHandler(container) {
       if (d < minDist) { minDist = d; closestIdx = i; }
     });
 
-    // VexFlow line 0 = top string = our string (NUM_STRINGS-1) = G
-    // VexFlow line 3 = bottom string = our string 0 = E
+    // VexFlow line 0 = top (our string NUM_STRINGS-1 = G), line 3 = bottom (our string 0 = E)
     const ourString = (NUM_STRINGS - 1) - closestIdx;
     dispatch({ type: 'TAP_STRING', payload: { string: ourString } });
-  });
+  }
 }
