@@ -1,15 +1,19 @@
 import { pitchToVexKey } from './model.js';
+import { dispatch } from './store.js';
 
-// Layout constants
-const STAVE_Y     = 10;   // y of standard notation stave
-const TAB_Y       = 120;  // y of TAB stave
-const CANVAS_H    = 230;  // total SVG height
+const STAVE_Y     = 10;
+const TAB_Y       = 120;
+const CANVAS_H    = 230;
 const X_MARGIN    = 10;
-const NOTE_SLOT_W = 52;   // px allocated per note
-const MEASURE_PAD = 24;   // padding within each measure
-const CLEF_W      = 80;   // extra width on first measure for clef + time sig
+const NOTE_SLOT_W = 52;
+const MEASURE_PAD = 24;
+const CLEF_W      = 80;
+const NUM_STRINGS  = 4;
 
-export function render(score, _cursor, _selection) {
+// Populated each render(); consumed by the SVG tap handler
+let renderedMeasures = [];
+
+export function render(score, cursor, _selection) {
   const V = window.Vex?.Flow;
   if (!V) { console.error('VexFlow not loaded'); return; }
 
@@ -17,24 +21,44 @@ export function render(score, _cursor, _selection) {
   if (!container) return;
 
   container.innerHTML = '';
+  renderedMeasures = [];
 
   const { measures } = score;
   const widths = measures.map((m, i) => calcWidth(m, i === 0));
-  const totalW = widths.reduce((a, b) => a + b, 0) + X_MARGIN * 2;
+  const totalW  = widths.reduce((a, b) => a + b, 0) + X_MARGIN * 2;
 
   const renderer = new V.Renderer(container, V.Renderer.Backends.SVG);
   renderer.resize(totalW, CANVAS_H);
   const ctx = renderer.getContext();
 
+  // Cursor highlight: inserted first so stave elements appear on top (SVG z-order)
+  const svg = container.querySelector('svg');
+  if (svg && cursor.measureIndex >= 0 && cursor.measureIndex < measures.length) {
+    let hx = X_MARGIN;
+    for (let i = 0; i < cursor.measureIndex; i++) hx += widths[i];
+    const hilite = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    hilite.setAttribute('x', hx);
+    hilite.setAttribute('y', STAVE_Y - 5);
+    hilite.setAttribute('width', widths[cursor.measureIndex]);
+    hilite.setAttribute('height', CANVAS_H);
+    hilite.setAttribute('fill', 'rgba(74, 144, 226, 0.12)');
+    hilite.setAttribute('pointer-events', 'none');
+    svg.appendChild(hilite);
+  }
+
   let x = X_MARGIN;
   measures.forEach((measure, mi) => {
     try {
-      renderMeasure(ctx, V, measure, x, widths[mi], mi === 0);
+      const tabStave = renderMeasure(ctx, V, measure, x, widths[mi], mi === 0);
+      renderedMeasures.push({ x, width: widths[mi], tabStave, mi });
     } catch (err) {
       console.warn(`Measure ${mi} render error:`, err);
+      renderedMeasures.push({ x, width: widths[mi], tabStave: null, mi });
     }
     x += widths[mi];
   });
+
+  attachTapHandler(container);
 }
 
 function calcWidth(measure, isFirst) {
@@ -43,24 +67,20 @@ function calcWidth(measure, isFirst) {
 }
 
 function renderMeasure(ctx, V, measure, x, width, isFirst) {
-  // Standard notation stave (bass clef)
   const stave = new V.Stave(x, STAVE_Y, width);
   if (isFirst) stave.addClef('bass').addTimeSignature('4/4');
   stave.setContext(ctx).draw();
 
-  // TAB stave (4 strings)
-  const tabStave = new V.TabStave(x, TAB_Y, width);
+  const tabStave = new V.TabStave(x, TAB_Y, width, { num_lines: NUM_STRINGS });
   if (isFirst) tabStave.addTabGlyph();
   tabStave.setContext(ctx).draw();
 
-  if (measure.notes.length === 0) return;
+  if (measure.notes.length === 0) return tabStave;
 
   const staveNotes = measure.notes.map(n => toStaveNote(n, V));
   const tabNotes   = measure.notes.map(n => toTabNote(n, V));
 
   const { beats, value } = measure.timeSignature;
-
-  // Voice.Mode.SOFT (numeric 2) allows partially-filled measures during editing
   const SOFT = V.Voice.Mode?.SOFT ?? 2;
 
   const sv = new V.Voice({ num_beats: beats, beat_value: value });
@@ -71,7 +91,6 @@ function renderMeasure(ctx, V, measure, x, width, isFirst) {
   tv.setMode(SOFT);
   tv.addTickables(tabNotes);
 
-  // noteW: available space for notes (subtract clef/timesig area on first measure)
   const noteW = width - (isFirst ? CLEF_W : MEASURE_PAD / 2) - MEASURE_PAD;
 
   new V.Formatter()
@@ -82,43 +101,70 @@ function renderMeasure(ctx, V, measure, x, width, isFirst) {
   sv.draw(ctx, stave);
   tv.draw(ctx, tabStave);
 
-  // Beams for 8th / 16th notes in standard notation only
   V.Beam.generateBeams(staveNotes.filter(n => !n.isRest()))
     .forEach(b => b.setContext(ctx).draw());
+
+  return tabStave;
 }
 
 function toStaveNote(note, V) {
   if (note.isRest) {
-    // 'd/3' is the mid-staff rest position for bass clef
-    return new V.StaveNote({
-      keys: ['d/3'],
-      duration: `${note.vexDuration}r`,
-      clef: 'bass',
-    });
+    return new V.StaveNote({ keys: ['d/3'], duration: `${note.vexDuration}r`, clef: 'bass' });
   }
-
-  const sn = new V.StaveNote({
-    keys: [pitchToVexKey(note.pitch)],
-    duration: note.vexDuration,
-    clef: 'bass',
-  });
-
-  if (note.pitch.name.includes('#')) {
-    sn.addModifier(new V.Accidental('#'));
-  }
-
+  const sn = new V.StaveNote({ keys: [pitchToVexKey(note.pitch)], duration: note.vexDuration, clef: 'bass' });
+  if (note.pitch.name.includes('#')) sn.addModifier(new V.Accidental('#'));
   return sn;
 }
 
 function toTabNote(note, V) {
-  if (note.isRest) {
-    // GhostNote keeps TAB timing aligned; string-form constructor is the safe API in VexFlow 4.x
-    return new V.GhostNote(note.vexDuration);
-  }
-
-  // Our string 0 = E (lowest, bottom TAB line) → VexFlow str 4 (4-string, 1-indexed from top)
+  if (note.isRest) return new V.GhostNote(note.vexDuration);
+  // Our string 0 = E (lowest) maps to VexFlow str NUM_STRINGS (bottom line, 1-indexed from top)
   return new V.TabNote({
-    positions: [{ str: 4 - note.string, fret: note.fret }],
+    positions: [{ str: NUM_STRINGS - note.string, fret: note.fret }],
     duration: note.vexDuration,
+  });
+}
+
+function attachTapHandler(container) {
+  const svg = container.querySelector('svg');
+  if (!svg || renderedMeasures.length === 0) return;
+
+  svg.addEventListener('click', (e) => {
+    const rect = svg.getBoundingClientRect();
+    const svgX  = e.clientX - rect.left;
+    const svgY  = e.clientY - rect.top;
+
+    // Which measure?
+    const found = renderedMeasures.find(m => svgX >= m.x && svgX < m.x + m.width);
+    if (!found || !found.tabStave) return;
+
+    // Get actual y positions of each TAB string from VexFlow
+    let lineYs;
+    try {
+      lineYs = Array.from({ length: NUM_STRINGS }, (_, i) => found.tabStave.getYForLine(i));
+    } catch {
+      // Fallback: default TabStave spacing is 13px, top_text_position adds one unit
+      lineYs = Array.from({ length: NUM_STRINGS }, (_, i) => TAB_Y + (i + 1) * 13);
+    }
+
+    const spacing = lineYs.length > 1 ? lineYs[1] - lineYs[0] : 13;
+    const topY    = lineYs[0] - spacing;
+    const bottomY = lineYs[NUM_STRINGS - 1] + spacing;
+
+    // Only respond to taps inside the TAB stave area
+    if (svgY < topY || svgY > bottomY) return;
+
+    // Closest string line
+    let closestIdx = 0;
+    let minDist    = Infinity;
+    lineYs.forEach((y, i) => {
+      const d = Math.abs(svgY - y);
+      if (d < minDist) { minDist = d; closestIdx = i; }
+    });
+
+    // VexFlow line 0 = top string = our string (NUM_STRINGS-1) = G
+    // VexFlow line 3 = bottom string = our string 0 = E
+    const ourString = (NUM_STRINGS - 1) - closestIdx;
+    dispatch({ type: 'TAP_STRING', payload: { string: ourString } });
   });
 }
