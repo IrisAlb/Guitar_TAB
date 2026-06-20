@@ -480,7 +480,56 @@
         drawTie(ctx, V, staveNotes[i], staveNotes[i + 1], tabNotes[i], tabNotes[i + 1]);
       }
     });
+    const svg = document.querySelector("#score-canvas svg");
+    if (svg) {
+      measure.notes.forEach((note, i) => {
+        if (!note.isRest) return;
+        try {
+          const x2 = staveNotes[i].getAbsoluteX();
+          drawTabRestSymbol(svg, note, x2, tabStave);
+        } catch (_) {
+        }
+      });
+    }
     return { tabStave, staveNotes, tabNotes };
+  }
+  function drawTabRestSymbol(svg, note, x, tabStave) {
+    let midY;
+    try {
+      midY = tabStave.getYForLine(1.5);
+    } catch (_) {
+      midY = TAB_Y + 45;
+    }
+    const dur = note.duration;
+    if (dur === "w" || dur === "h") {
+      const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      rect.setAttribute("width", 14);
+      rect.setAttribute("height", 5);
+      rect.setAttribute("x", x - 7);
+      rect.setAttribute("y", dur === "w" ? midY - 5 : midY);
+      rect.setAttribute("fill", "#000");
+      svg.appendChild(rect);
+      if (note.dotted) {
+        const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        dot.setAttribute("cx", x + 10);
+        dot.setAttribute("cy", dur === "w" ? midY - 3 : midY + 3);
+        dot.setAttribute("r", 2);
+        dot.setAttribute("fill", "#000");
+        svg.appendChild(dot);
+      }
+    } else {
+      const GLYPH = { "q": "\u{1D13D}", "8": "\u{1D13E}", "16": "\u{1D13F}" };
+      const ch = GLYPH[dur] ?? "\u{1D13D}";
+      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      text.setAttribute("x", x);
+      text.setAttribute("y", midY + 10);
+      text.setAttribute("text-anchor", "middle");
+      text.setAttribute("font-size", "22");
+      text.setAttribute("font-family", '"Times New Roman", serif');
+      text.setAttribute("fill", "#000");
+      text.textContent = note.dotted ? ch + "." : ch;
+      svg.appendChild(text);
+    }
   }
   function drawTie(ctx, V, sn0, sn1, tn0, tn1) {
     let staveTieDrawn = false;
