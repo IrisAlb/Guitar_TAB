@@ -267,20 +267,25 @@ function drawSvgArc(x1, x2, y, curvature) {
 
 function toStaveNote(note, V) {
   if (note.isRest) {
-    return new V.StaveNote({ keys: ['d/3'], duration: `${note.vexDuration}r`, clef: 'bass' });
+    const sn = new V.StaveNote({ keys: ['d/3'], duration: `${note.vexDuration}r`, clef: 'bass' });
+    if (note.dotted && V.Dot) V.Dot.buildAndAttach([sn], { index: 0 });
+    return sn;
   }
   const sn = new V.StaveNote({ keys: [pitchToVexKey(note.pitch)], duration: note.vexDuration, clef: 'bass' });
   if (note.pitch.name.includes('#')) sn.addModifier(new V.Accidental('#'));
+  if (note.dotted && V.Dot) V.Dot.buildAndAttach([sn], { index: 0 });
   return sn;
 }
 
 function toTabNote(note, V) {
   if (note.isRest) return new V.GhostNote(note.vexDuration);
   // Our string 0 = E (lowest) maps to VexFlow str NUM_STRINGS (bottom line, 1-indexed from top)
-  return new V.TabNote({
+  const tn = new V.TabNote({
     positions: [{ str: NUM_STRINGS - note.string, fret: note.fret }],
     duration: note.vexDuration,
   });
+  if (note.dotted && V.Dot) V.Dot.buildAndAttach([tn], { index: 0 });
+  return tn;
 }
 
 function attachTapHandler(container) {
