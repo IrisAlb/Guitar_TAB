@@ -160,7 +160,7 @@ function renderMeasure(ctx, V, measure, x, width, isFirst) {
   return { tabStave, staveNotes, tabNotes };
 }
 
-function drawTabRestSymbol(svg, note, x, tabStave, ctx, V) {
+function drawTabRestSymbol(svg, note, x, tabStave, _ctx, _V) {
   // Vertical center of the 4-string TAB stave (between string 1 and string 2)
   let midY;
   try { midY = tabStave.getYForLine(1.5); }
@@ -168,36 +168,29 @@ function drawTabRestSymbol(svg, note, x, tabStave, ctx, V) {
 
   const dur = note.duration;
 
-  // Try VexFlow Glyph first — uses embedded Bravura font, works on all platforms
-  const GLYPH_MAP = { w: 'restWhole', h: 'restHalf', q: 'restQuarter', '8': 'rest8th', '16': 'rest16th' };
-  const glyphCode = GLYPH_MAP[dur] ?? 'restQuarter';
-  let glyphDrawn = false;
-  if (V?.Glyph?.renderGlyph) {
-    try {
-      V.Glyph.renderGlyph(ctx, x, midY + 4, 30, glyphCode);
-      glyphDrawn = true;
-    } catch (_) {}
-  }
-
-  if (!glyphDrawn) {
-    if (dur === 'w' || dur === 'h') {
-      // Geometric fallback: filled rectangles
-      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      rect.setAttribute('width', 14);
-      rect.setAttribute('height', 5);
-      rect.setAttribute('x', x - 7);
-      rect.setAttribute('y', dur === 'w' ? midY - 5 : midY);
-      rect.setAttribute('fill', '#000');
-      svg.appendChild(rect);
-    } else {
-      // SVG path fallback for quarter/8th/16th (simple zigzag approximation)
-      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('d', `M ${x-3},${midY-6} L ${x+3},${midY} L ${x-3},${midY+2} L ${x+3},${midY+8}`);
-      path.setAttribute('stroke', '#000');
-      path.setAttribute('stroke-width', '2');
-      path.setAttribute('fill', 'none');
-      svg.appendChild(path);
-    }
+  if (dur === 'w' || dur === 'h') {
+    // Whole rest: filled rect hanging below midline; Half rest: sitting above midline
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('width', 14);
+    rect.setAttribute('height', 5);
+    rect.setAttribute('x', x - 7);
+    rect.setAttribute('y', dur === 'w' ? midY - 5 : midY);
+    rect.setAttribute('fill', '#000');
+    svg.appendChild(rect);
+  } else {
+    // Quarter/8th/16th: render via Bravura font (embedded by VexFlow) using SMuFL PUA code points.
+    // These are distinct glyphs and render correctly on all platforms once Bravura is loaded.
+    const GLYPH_CHAR = { q: '', '8': '', '16': '' };
+    const ch = GLYPH_CHAR[dur] ?? '';
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.setAttribute('x', x);
+    text.setAttribute('y', midY + 10);
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('font-size', '26');
+    text.setAttribute('font-family', 'Bravura, serif');
+    text.setAttribute('fill', '#000');
+    text.textContent = ch;
+    svg.appendChild(text);
   }
 
   // Dot for dotted rests
