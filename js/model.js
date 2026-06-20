@@ -24,6 +24,32 @@ const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 
 // Ticks per note value (whole note = 4096)
 const BASE_TICKS = { w: 4096, h: 2048, q: 1024, '8': 512, '16': 256 };
 
+// Ordered largest-first: used by the greedy split algorithm
+const TICK_MAP = [
+  [4096, 'w',  false],
+  [3072, 'h',  true ],
+  [2048, 'h',  false],
+  [1536, 'q',  true ],
+  [1024, 'q',  false],
+  [768,  '8',  true ],
+  [512,  '8',  false],
+  [384,  '16', true ],
+  [256,  '16', false],
+];
+
+/**
+ * Split a tick count into the minimum array of {duration, dotted} objects.
+ * Any multiple of 256 (= 1/16 note) can be represented exactly.
+ */
+export function splitTicks(ticks) {
+  const result = [];
+  let rem = ticks;
+  for (const [t, duration, dotted] of TICK_MAP) {
+    while (rem >= t) { result.push({ duration, dotted }); rem -= t; }
+  }
+  return result;
+}
+
 export function midiToPitch(midi) {
   return { name: NOTE_NAMES[midi % 12], octave: Math.floor(midi / 12) - 1 };
 }
@@ -60,13 +86,15 @@ export function autoAssign(midiPitch, tuning = STANDARD_BASS_TUNING, previousNot
 
 export class Note {
   constructor({
-    duration   = DURATION.QUARTER,
-    dotted     = false,
-    isRest     = false,
-    string     = 0,
-    fret       = 0,
-    pitch      = null,
-    techniques = [],
+    duration    = DURATION.QUARTER,
+    dotted      = false,
+    isRest      = false,
+    string      = 0,
+    fret        = 0,
+    pitch       = null,
+    techniques  = [],
+    tiedToNext  = false,  // this note has a tie arc going to the next note
+    isTied      = false,  // this note is the continuation of a preceding tied note
   } = {}) {
     this.duration   = duration;
     this.dotted     = dotted;
@@ -75,6 +103,8 @@ export class Note {
     this.fret       = fret;
     this.pitch      = pitch ?? midiToPitch(STANDARD_BASS_TUNING[string] + fret);
     this.techniques = [...techniques];
+    this.tiedToNext = tiedToNext;
+    this.isTied     = isTied;
   }
 
   // VexFlow duration string ('q', 'qd', '8', etc.)

@@ -11,6 +11,28 @@
   var MAX_FRET = 20;
   var NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
   var BASE_TICKS = { w: 4096, h: 2048, q: 1024, "8": 512, "16": 256 };
+  var TICK_MAP = [
+    [4096, "w", false],
+    [3072, "h", true],
+    [2048, "h", false],
+    [1536, "q", true],
+    [1024, "q", false],
+    [768, "8", true],
+    [512, "8", false],
+    [384, "16", true],
+    [256, "16", false]
+  ];
+  function splitTicks(ticks) {
+    const result = [];
+    let rem = ticks;
+    for (const [t, duration, dotted] of TICK_MAP) {
+      while (rem >= t) {
+        result.push({ duration, dotted });
+        rem -= t;
+      }
+    }
+    return result;
+  }
   function midiToPitch(midi) {
     return { name: NOTE_NAMES[midi % 12], octave: Math.floor(midi / 12) - 1 };
   }
@@ -25,7 +47,11 @@
       string = 0,
       fret = 0,
       pitch = null,
-      techniques = []
+      techniques = [],
+      tiedToNext = false,
+      // this note has a tie arc going to the next note
+      isTied = false
+      // this note is the continuation of a preceding tied note
     } = {}) {
       this.duration = duration;
       this.dotted = dotted;
@@ -34,6 +60,8 @@
       this.fret = fret;
       this.pitch = pitch ?? midiToPitch(STANDARD_BASS_TUNING[string] + fret);
       this.techniques = [...techniques];
+      this.tiedToNext = tiedToNext;
+      this.isTied = isTied;
     }
     // VexFlow duration string ('q', 'qd', '8', etc.)
     get vexDuration() {
@@ -218,17 +246,39 @@
         }
         const fret = state.input.pendingFret === "" ? 0 : parseInt(state.input.pendingFret, 10);
         pushUndo();
-        const note = new Note({
+        const totalTicks = new Note({
           duration: state.input.duration,
           dotted: state.input.dotted,
           isRest: false,
           string: state.input.targetString,
           fret
-        });
-        const measure = state.score.measures[state.cursor.measureIndex];
-        if (measure.hasRoomFor(note.ticks)) {
-          measure.notes.push(note);
-          advanceCursor(note.ticks);
+        }).ticks;
+        let ticksLeft = totalTicks;
+        let isFirst = true;
+        while (ticksLeft > 0) {
+          const curMeasure = state.score.measures[state.cursor.measureIndex];
+          const remaining = curMeasure.capacity - state.cursor.beatTick;
+          if (remaining <= 0) break;
+          const chunk = Math.min(ticksLeft, remaining);
+          const parts = splitTicks(chunk);
+          if (parts.length === 0) break;
+          parts.forEach((part, i) => {
+            const isLastPart = i === parts.length - 1;
+            const isLastChunk = chunk >= ticksLeft;
+            const n = new Note({
+              duration: part.duration,
+              dotted: part.dotted,
+              isRest: false,
+              string: state.input.targetString,
+              fret,
+              isTied: !isFirst,
+              tiedToNext: !isLastPart || !isLastChunk
+            });
+            curMeasure.notes.push(n);
+            advanceCursor(n.ticks);
+            isFirst = false;
+          });
+          ticksLeft -= chunk;
         }
         resetFretInput();
         break;
@@ -357,13 +407,28 @@
       svg.appendChild(hilite);
     }
     let x = X_MARGIN;
+    let prevResult = null;
     measures.forEach((measure, mi) => {
       try {
-        const tabStave = renderMeasure(ctx, V, measure, x, widths[mi], mi === 0);
-        renderedMeasures.push({ x, width: widths[mi], tabStave, mi });
+        const result = renderMeasure(ctx, V, measure, x, widths[mi], mi === 0);
+        renderedMeasures.push({ x, width: widths[mi], tabStave: result.tabStave, mi });
+        if (prevResult && measures[mi - 1]) {
+          const prevNotes = measures[mi - 1].notes;
+          const lastPrev = prevNotes[prevNotes.length - 1];
+          const firstCur = measure.notes[0];
+          if (lastPrev?.tiedToNext && firstCur?.isTied && !lastPrev.isRest && !firstCur.isRest) {
+            const sn0 = prevResult.staveNotes[prevResult.staveNotes.length - 1];
+            const sn1 = result.staveNotes[0];
+            const tn0 = prevResult.tabNotes[prevResult.tabNotes.length - 1];
+            const tn1 = result.tabNotes[0];
+            drawTie(ctx, V, sn0, sn1, tn0, tn1);
+          }
+        }
+        prevResult = result;
       } catch (err) {
         console.warn(`Measure ${mi} render error:`, err);
         renderedMeasures.push({ x, width: widths[mi], tabStave: null, mi });
+        prevResult = null;
       }
       x += widths[mi];
     });
@@ -394,7 +459,7 @@
     const tabStave = new V.TabStave(x, TAB_Y, width, { num_lines: NUM_STRINGS });
     if (isFirst) tabStave.addTabGlyph();
     tabStave.setContext(ctx).draw();
-    if (measure.notes.length === 0) return tabStave;
+    if (measure.notes.length === 0) return { tabStave, staveNotes: [], tabNotes: [] };
     const staveNotes = measure.notes.map((n) => toStaveNote(n, V));
     const tabNotes = measure.notes.map((n) => toTabNote(n, V));
     const { beats, value } = measure.timeSignature;
@@ -410,7 +475,35 @@
     sv.draw(ctx, stave);
     tv.draw(ctx, tabStave);
     V.Beam.generateBeams(staveNotes.filter((n) => !n.isRest())).forEach((b) => b.setContext(ctx).draw());
-    return tabStave;
+    measure.notes.forEach((note, i) => {
+      if (note.tiedToNext && !note.isRest && i + 1 < measure.notes.length && !measure.notes[i + 1].isRest) {
+        drawTie(ctx, V, staveNotes[i], staveNotes[i + 1], tabNotes[i], tabNotes[i + 1]);
+      }
+    });
+    return { tabStave, staveNotes, tabNotes };
+  }
+  function drawTie(ctx, V, sn0, sn1, tn0, tn1) {
+    try {
+      new V.StaveTie({
+        first_note: sn0,
+        last_note: sn1,
+        first_indices: [0],
+        last_indices: [0]
+      }).setContext(ctx).draw();
+    } catch (e) {
+      console.warn("StaveTie error:", e);
+    }
+    try {
+      const TieClass = V.TabTie ?? V.StaveTie;
+      new TieClass({
+        first_note: tn0,
+        last_note: tn1,
+        first_indices: [0],
+        last_indices: [0]
+      }).setContext(ctx).draw();
+    } catch (e) {
+      console.warn("TabTie error:", e);
+    }
   }
   function toStaveNote(note, V) {
     if (note.isRest) {

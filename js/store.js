@@ -1,4 +1,4 @@
-import { Score, Measure, Note, deserializeScore, MAX_FRET } from './model.js';
+import { Score, Measure, Note, deserializeScore, MAX_FRET, splitTicks } from './model.js';
 
 const STORAGE_KEY = 'bass_tab_v1';
 const UNDO_LIMIT  = 50;
@@ -160,18 +160,46 @@ function handleAction({ type, payload = {} }) {
 
       pushUndo();
 
-      const note = new Note({
+      // Total ticks of the selected note value
+      const totalTicks = new Note({
         duration: state.input.duration,
         dotted:   state.input.dotted,
         isRest:   false,
         string:   state.input.targetString,
         fret,
-      });
+      }).ticks;
 
-      const measure = state.score.measures[state.cursor.measureIndex];
-      if (measure.hasRoomFor(note.ticks)) {
-        measure.notes.push(note);
-        advanceCursor(note.ticks);
+      let ticksLeft = totalTicks;
+      let isFirst   = true;
+
+      // Distribute ticks across measures, creating tied notes when overflowing
+      while (ticksLeft > 0) {
+        const curMeasure = state.score.measures[state.cursor.measureIndex];
+        const remaining  = curMeasure.capacity - state.cursor.beatTick;
+        if (remaining <= 0) break;
+
+        const chunk = Math.min(ticksLeft, remaining);
+        const parts = splitTicks(chunk);
+        if (parts.length === 0) break;
+
+        parts.forEach((part, i) => {
+          const isLastPart  = i === parts.length - 1;
+          const isLastChunk = chunk >= ticksLeft;
+          const n = new Note({
+            duration:   part.duration,
+            dotted:     part.dotted,
+            isRest:     false,
+            string:     state.input.targetString,
+            fret,
+            isTied:     !isFirst,
+            tiedToNext: !isLastPart || !isLastChunk,
+          });
+          curMeasure.notes.push(n);
+          advanceCursor(n.ticks);
+          isFirst = false;
+        });
+
+        ticksLeft -= chunk;
       }
 
       resetFretInput();
