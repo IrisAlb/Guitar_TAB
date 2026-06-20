@@ -59,6 +59,21 @@ export function render(score, cursor, _selection) {
   });
 
   attachTapHandler(container);
+  scrollToCursor(cursor);
+}
+
+function scrollToCursor(cursor) {
+  const scoreArea = document.getElementById('score-area');
+  if (!scoreArea || renderedMeasures.length === 0) return;
+  const cm = renderedMeasures[cursor.measureIndex];
+  if (!cm) return;
+  const areaW = scoreArea.clientWidth;
+  const scrollL = scoreArea.scrollLeft;
+  if (cm.x < scrollL) {
+    scoreArea.scrollLeft = Math.max(0, cm.x - X_MARGIN);
+  } else if (cm.x + cm.width > scrollL + areaW) {
+    scoreArea.scrollLeft = cm.x + cm.width - areaW + X_MARGIN;
+  }
 }
 
 function calcWidth(measure, isFirst) {

@@ -152,6 +152,10 @@
       const next = state.cursor.measureIndex + 1;
       if (next < state.score.measures.length) {
         state.cursor.measureIndex = next;
+      } else {
+        const last = state.score.measures[state.score.measures.length - 1];
+        state.score.measures.push(new Measure({ timeSignature: { ...last.timeSignature } }));
+        state.cursor.measureIndex = next;
       }
     }
   }
@@ -182,7 +186,28 @@
         break;
       }
       case "CLEAR_FRET": {
-        state.input.pendingFret = state.input.pendingFret.slice(0, -1);
+        if (state.input.awaitingFret) {
+          if (state.input.pendingFret === "") {
+            resetFretInput();
+          } else {
+            state.input.pendingFret = state.input.pendingFret.slice(0, -1);
+          }
+        } else {
+          const measure = state.score.measures[state.cursor.measureIndex];
+          if (measure.notes.length > 0) {
+            pushUndo();
+            measure.notes.pop();
+            state.cursor.beatTick = measure.notes.reduce((sum, n) => sum + n.ticks, 0);
+          } else if (state.cursor.measureIndex > 0) {
+            state.cursor.measureIndex--;
+            const prev = state.score.measures[state.cursor.measureIndex];
+            if (prev.notes.length > 0) {
+              pushUndo();
+              prev.notes.pop();
+              state.cursor.beatTick = prev.notes.reduce((sum, n) => sum + n.ticks, 0);
+            }
+          }
+        }
         break;
       }
       case "CONFIRM_FRET": {
@@ -343,6 +368,20 @@
       x += widths[mi];
     });
     attachTapHandler(container);
+    scrollToCursor(cursor);
+  }
+  function scrollToCursor(cursor) {
+    const scoreArea = document.getElementById("score-area");
+    if (!scoreArea || renderedMeasures.length === 0) return;
+    const cm = renderedMeasures[cursor.measureIndex];
+    if (!cm) return;
+    const areaW = scoreArea.clientWidth;
+    const scrollL = scoreArea.scrollLeft;
+    if (cm.x < scrollL) {
+      scoreArea.scrollLeft = Math.max(0, cm.x - X_MARGIN);
+    } else if (cm.x + cm.width > scrollL + areaW) {
+      scoreArea.scrollLeft = cm.x + cm.width - areaW + X_MARGIN;
+    }
   }
   function calcWidth(measure, isFirst) {
     const slots = Math.max(1, measure.notes.length);
