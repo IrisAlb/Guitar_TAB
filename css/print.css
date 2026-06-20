@@ -1,8 +1,35 @@
-@media print {
-  #header      { display: none; }
-  #input-panel { display: none; }
+@media screen {
+  #print-canvas { display: none; }
+}
 
-  body         { height: auto; overflow: visible; background: #fff; }
-  #score-area  { overflow: visible; width: 100%; height: auto; }
-  #score-canvas { min-width: unset; }
+@media print {
+  #header       { display: none; }
+  #input-panel  { display: none; }
+  #score-area   { display: none; }
+
+  body          { height: auto; overflow: visible; background: #fff; margin: 0; }
+
+  #print-canvas {
+    display: block;
+    padding: 12mm 10mm;
+    color: #000;
+  }
+
+  .print-title {
+    font-size: 16pt;
+    font-weight: bold;
+    text-align: center;
+    margin: 0 0 6mm 0;
+    font-family: serif;
+  }
+
+  .print-row {
+    margin-bottom: 6mm;
+    page-break-inside: avoid;
+  }
+
+  .print-row svg {
+    display: block;
+    max-width: 100%;
+  }
 }

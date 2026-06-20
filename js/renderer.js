@@ -9,9 +9,13 @@ const NOTE_SLOT_W = 52;
 const MEASURE_PAD = 24;
 const CLEF_W      = 80;
 const NUM_STRINGS  = 4;
+const PRINT_W     = 720; // usable print width per system row
 
 // Populated each render(); consumed by the SVG tap handler
 let renderedMeasures = [];
+
+// Active SVG element for helper drawing functions (rest symbols, arcs, ties)
+let activeSvg = null;
 
 export function render(score, cursor, _selection) {
   const V = window.Vex?.Flow;
@@ -33,6 +37,7 @@ export function render(score, cursor, _selection) {
 
   // Cursor highlight: inserted first so stave elements appear on top (SVG z-order)
   const svg = container.querySelector('svg');
+  activeSvg = svg;
   if (svg && cursor.measureIndex >= 0 && cursor.measureIndex < measures.length) {
     let hx = X_MARGIN;
     for (let i = 0; i < cursor.measureIndex; i++) hx += widths[i];
@@ -80,6 +85,91 @@ export function render(score, cursor, _selection) {
   scrollToCursor(cursor);
 }
 
+// ── Print multi-system renderer ────────────────────────────────────────────
+export function renderPrint(score) {
+  const V = window.Vex?.Flow;
+  if (!V) return;
+
+  const container = document.getElementById('print-canvas');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const { measures } = score;
+
+  // Title
+  const titleEl = document.createElement('p');
+  titleEl.className = 'print-title';
+  titleEl.textContent = score.title;
+  container.appendChild(titleEl);
+
+  // Group measures into systems that fit within PRINT_W
+  const systems = []; // each entry = array of measure indices
+  let curSystem = [];
+  let curW = 0;
+
+  measures.forEach((m, mi) => {
+    const showClef = curSystem.length === 0;
+    const w = calcWidth(m, showClef);
+    if (curSystem.length > 0 && curW + w > PRINT_W) {
+      systems.push(curSystem);
+      curSystem = [mi];
+      curW = calcWidth(m, true);
+    } else {
+      curSystem.push(mi);
+      curW += w;
+    }
+  });
+  if (curSystem.length > 0) systems.push(curSystem);
+
+  // Render each system as its own SVG
+  systems.forEach((mIndices, si) => {
+    const rowDiv = document.createElement('div');
+    rowDiv.className = 'print-row';
+    container.appendChild(rowDiv);
+
+    const sysMeasures  = mIndices.map(mi => measures[mi]);
+    const sysWidths    = sysMeasures.map((m, i) => calcWidth(m, i === 0));
+    const totalW       = sysWidths.reduce((a, b) => a + b, 0) + X_MARGIN * 2;
+
+    const renderer = new V.Renderer(rowDiv, V.Renderer.Backends.SVG);
+    renderer.resize(totalW, CANVAS_H);
+    const ctx = renderer.getContext();
+    activeSvg = rowDiv.querySelector('svg');
+
+    let x = X_MARGIN;
+    let prevResult = null;
+
+    sysMeasures.forEach((measure, idx) => {
+      try {
+        const isFirst       = si === 0 && idx === 0;
+        const isSystemStart = idx === 0 && !isFirst;
+        const result = renderMeasure(ctx, V, measure, x, sysWidths[idx], isFirst, isSystemStart);
+
+        // Cross-measure ties within the same system
+        if (prevResult && idx > 0) {
+          const prevM    = sysMeasures[idx - 1];
+          const lastPrev = prevM.notes[prevM.notes.length - 1];
+          const firstCur = measure.notes[0];
+          if (lastPrev?.tiedToNext && firstCur?.isTied && !lastPrev.isRest && !firstCur.isRest) {
+            drawTie(ctx, V,
+              prevResult.staveNotes[prevResult.staveNotes.length - 1],
+              result.staveNotes[0],
+              prevResult.tabNotes[prevResult.tabNotes.length - 1],
+              result.tabNotes[0],
+            );
+          }
+        }
+        prevResult = result;
+      } catch (err) {
+        console.warn(`Print system ${si} measure ${mIndices[idx]} render error:`, err);
+        prevResult = null;
+      }
+      x += sysWidths[idx];
+    });
+  });
+}
+
+
 function scrollToCursor(cursor) {
   const scoreArea = document.getElementById('score-area');
   if (!scoreArea || renderedMeasures.length === 0) return;
@@ -99,13 +189,14 @@ function calcWidth(measure, isFirst) {
   return slots * NOTE_SLOT_W + MEASURE_PAD + (isFirst ? CLEF_W : 0);
 }
 
-function renderMeasure(ctx, V, measure, x, width, isFirst) {
+function renderMeasure(ctx, V, measure, x, width, isFirst, isSystemStart = false) {
   const stave = new V.Stave(x, STAVE_Y, width);
-  if (isFirst) stave.addClef('bass').addTimeSignature('4/4');
+  if (isFirst)       stave.addClef('bass').addTimeSignature('4/4');
+  else if (isSystemStart) stave.addClef('bass');
   stave.setContext(ctx).draw();
 
   const tabStave = new V.TabStave(x, TAB_Y, width, { num_lines: NUM_STRINGS });
-  if (isFirst) tabStave.addTabGlyph();
+  if (isFirst || isSystemStart) tabStave.addTabGlyph();
   tabStave.setContext(ctx).draw();
 
   if (measure.notes.length === 0) return { tabStave, staveNotes: [], tabNotes: [] };
@@ -124,7 +215,7 @@ function renderMeasure(ctx, V, measure, x, width, isFirst) {
   tv.setMode(SOFT);
   tv.addTickables(tabNotes);
 
-  const noteW = width - (isFirst ? CLEF_W : MEASURE_PAD / 2) - MEASURE_PAD;
+  const noteW = width - ((isFirst || isSystemStart) ? CLEF_W : MEASURE_PAD / 2) - MEASURE_PAD;
 
   new V.Formatter()
     .joinVoices([sv])
@@ -145,14 +236,13 @@ function renderMeasure(ctx, V, measure, x, width, isFirst) {
   });
 
   // Draw rest symbols on TAB stave (GhostNote is invisible; add symbols manually)
-  const svg = document.querySelector('#score-canvas svg');
-  if (svg) {
+  if (activeSvg) {
     measure.notes.forEach((note, i) => {
       if (!note.isRest) return;
       try {
         // StaveNote rests have reliable absolute x after formatting
         const x = staveNotes[i].getAbsoluteX();
-        drawTabRestSymbol(svg, note, x, tabStave, ctx, V);
+        drawTabRestSymbol(activeSvg, note, x, tabStave, ctx, V);
       } catch (_) {}
     });
   }
@@ -255,7 +345,7 @@ function drawTie(ctx, V, sn0, sn1, tn0, tn1) {
 
 // SVG に二次ベジェ曲線でタイアークを直接描画
 function drawSvgArc(x1, x2, y, curvature) {
-  const svg = document.querySelector('#score-canvas svg');
+  const svg = activeSvg;
   if (!svg || x2 <= x1) return;
   const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   path.setAttribute('d', `M ${x1},${y} Q ${(x1 + x2) / 2},${y + curvature} ${x2},${y}`);

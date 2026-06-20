@@ -1,5 +1,5 @@
 import { load, state, dispatch, subscribe } from './store.js';
-import { render } from './renderer.js';
+import { render, renderPrint } from './renderer.js';
 import { init as initUI, update as updateUI } from './ui.js';
 
 load();
@@ -12,6 +12,9 @@ subscribe(s => {
 
 render(state.score, state.cursor, state.selection);
 updateUI(state);
+
+// Generate multi-system print layout just before the OS print dialog opens
+window.addEventListener('beforeprint', () => renderPrint(state.score));
 
 window.app = { state, dispatch };
 
