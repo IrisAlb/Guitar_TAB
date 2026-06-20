@@ -148,26 +148,64 @@ function renderMeasure(ctx, V, measure, x, width, isFirst) {
 }
 
 function drawTie(ctx, V, sn0, sn1, tn0, tn1) {
-  // Standard notation tie
-  try {
-    new V.StaveTie({
-      first_note:    sn0,
-      last_note:     sn1,
-      first_indices: [0],
-      last_indices:  [0],
-    }).setContext(ctx).draw();
-  } catch (e) { console.warn('StaveTie error:', e); }
+  // ── 五線譜タイ ─────────────────────────────────────────────────────────
+  // VexFlow StaveTie を試みて、失敗したら SVG パスで直描画
+  let staveTieDrawn = false;
+  if (V.StaveTie && sn0 && sn1) {
+    try {
+      new V.StaveTie({
+        first_note: sn0, last_note: sn1,
+        first_indices: [0], last_indices: [0],
+      }).setContext(ctx).draw();
+      staveTieDrawn = true;
+    } catch (_) { /* fall through */ }
+  }
+  if (!staveTieDrawn && sn0 && sn1) {
+    // 手動フォールバック: 音符上部をアーチで結ぶ
+    try {
+      const x1 = sn0.getAbsoluteX() + 4;
+      const x2 = sn1.getAbsoluteX() - 4;
+      const st  = sn0.getStave();
+      const y   = st ? st.getYForLine(2) : STAVE_Y + 25;
+      drawSvgArc(x1, x2, y, -14);
+    } catch (_) { /* ignore */ }
+  }
 
-  // TAB tie (falls back to StaveTie if TabTie unavailable)
-  try {
-    const TieClass = V.TabTie ?? V.StaveTie;
-    new TieClass({
-      first_note:    tn0,
-      last_note:     tn1,
-      first_indices: [0],
-      last_indices:  [0],
-    }).setContext(ctx).draw();
-  } catch (e) { console.warn('TabTie error:', e); }
+  // ── TAB タイ ──────────────────────────────────────────────────────────
+  // TabNote の string 情報から手動 SVG アークを描画（最も確実）
+  if (tn0 && tn1) {
+    try {
+      const x1 = tn0.getAbsoluteX() + 4;
+      const x2 = tn1.getAbsoluteX() - 4;
+      if (x1 < x2) {
+        // getPositions() は TabNote の API; GhostNote では使わない
+        const positions = typeof tn0.getPositions === 'function'
+          ? tn0.getPositions()
+          : (tn0.positions ?? []);
+        if (positions.length > 0) {
+          const vexStr  = positions[0].str; // 1-indexed from top
+          const tabSt   = tn0.getStave();
+          // getYForLine: VexFlow line index は 0 = 最上弦 (str 1)
+          const lineY   = tabSt
+            ? tabSt.getYForLine(vexStr - 1)
+            : TAB_Y + vexStr * 13;
+          drawSvgArc(x1, x2, lineY + 4, +12);
+        }
+      }
+    } catch (_) { /* ignore */ }
+  }
+}
+
+// SVG に二次ベジェ曲線でタイアークを直接描画
+function drawSvgArc(x1, x2, y, curvature) {
+  const svg = document.querySelector('#score-canvas svg');
+  if (!svg || x2 <= x1) return;
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', `M ${x1},${y} Q ${(x1 + x2) / 2},${y + curvature} ${x2},${y}`);
+  path.setAttribute('stroke', '#222');
+  path.setAttribute('stroke-width', '1.5');
+  path.setAttribute('fill', 'none');
+  svg.appendChild(path);
 }
 
 function toStaveNote(note, V) {

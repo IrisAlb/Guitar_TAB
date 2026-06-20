@@ -483,27 +483,55 @@
     return { tabStave, staveNotes, tabNotes };
   }
   function drawTie(ctx, V, sn0, sn1, tn0, tn1) {
-    try {
-      new V.StaveTie({
-        first_note: sn0,
-        last_note: sn1,
-        first_indices: [0],
-        last_indices: [0]
-      }).setContext(ctx).draw();
-    } catch (e) {
-      console.warn("StaveTie error:", e);
+    let staveTieDrawn = false;
+    if (V.StaveTie && sn0 && sn1) {
+      try {
+        new V.StaveTie({
+          first_note: sn0,
+          last_note: sn1,
+          first_indices: [0],
+          last_indices: [0]
+        }).setContext(ctx).draw();
+        staveTieDrawn = true;
+      } catch (_) {
+      }
     }
-    try {
-      const TieClass = V.TabTie ?? V.StaveTie;
-      new TieClass({
-        first_note: tn0,
-        last_note: tn1,
-        first_indices: [0],
-        last_indices: [0]
-      }).setContext(ctx).draw();
-    } catch (e) {
-      console.warn("TabTie error:", e);
+    if (!staveTieDrawn && sn0 && sn1) {
+      try {
+        const x1 = sn0.getAbsoluteX() + 4;
+        const x2 = sn1.getAbsoluteX() - 4;
+        const st = sn0.getStave();
+        const y = st ? st.getYForLine(2) : STAVE_Y + 25;
+        drawSvgArc(x1, x2, y, -14);
+      } catch (_) {
+      }
     }
+    if (tn0 && tn1) {
+      try {
+        const x1 = tn0.getAbsoluteX() + 4;
+        const x2 = tn1.getAbsoluteX() - 4;
+        if (x1 < x2) {
+          const positions = typeof tn0.getPositions === "function" ? tn0.getPositions() : tn0.positions ?? [];
+          if (positions.length > 0) {
+            const vexStr = positions[0].str;
+            const tabSt = tn0.getStave();
+            const lineY = tabSt ? tabSt.getYForLine(vexStr - 1) : TAB_Y + vexStr * 13;
+            drawSvgArc(x1, x2, lineY + 4, 12);
+          }
+        }
+      } catch (_) {
+      }
+    }
+  }
+  function drawSvgArc(x1, x2, y, curvature) {
+    const svg = document.querySelector("#score-canvas svg");
+    if (!svg || x2 <= x1) return;
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", `M ${x1},${y} Q ${(x1 + x2) / 2},${y + curvature} ${x2},${y}`);
+    path.setAttribute("stroke", "#222");
+    path.setAttribute("stroke-width", "1.5");
+    path.setAttribute("fill", "none");
+    svg.appendChild(path);
   }
   function toStaveNote(note, V) {
     if (note.isRest) {
