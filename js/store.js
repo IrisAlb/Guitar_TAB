@@ -202,7 +202,9 @@ function handleAction({ type, payload = {} }) {
         ticksLeft -= chunk;
       }
 
-      resetFretInput();
+      // Keep awaitingFret + targetString + pendingFret so the user can immediately
+      // confirm again to enter the same note (common for repeated bass notes).
+      // Tapping a different string or pressing backspace resets as needed.
       break;
     }
 

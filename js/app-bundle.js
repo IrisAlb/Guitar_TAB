@@ -280,7 +280,6 @@
           });
           ticksLeft -= chunk;
         }
-        resetFretInput();
         break;
       }
       case "ADD_REST": {
