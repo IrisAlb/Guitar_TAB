@@ -152,7 +152,7 @@ function renderMeasure(ctx, V, measure, x, width, isFirst) {
       try {
         // StaveNote rests have reliable absolute x after formatting
         const x = staveNotes[i].getAbsoluteX();
-        drawTabRestSymbol(svg, note, x, tabStave);
+        drawTabRestSymbol(svg, note, x, tabStave, ctx, V);
       } catch (_) {}
     });
   }
@@ -160,7 +160,7 @@ function renderMeasure(ctx, V, measure, x, width, isFirst) {
   return { tabStave, staveNotes, tabNotes };
 }
 
-function drawTabRestSymbol(svg, note, x, tabStave) {
+function drawTabRestSymbol(svg, note, x, tabStave, ctx, V) {
   // Vertical center of the 4-string TAB stave (between string 1 and string 2)
   let midY;
   try { midY = tabStave.getYForLine(1.5); }
@@ -168,38 +168,46 @@ function drawTabRestSymbol(svg, note, x, tabStave) {
 
   const dur = note.duration;
 
-  if (dur === 'w' || dur === 'h') {
-    // Whole rest: filled rectangle hanging below midline
-    // Half  rest: filled rectangle sitting above midline
-    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    rect.setAttribute('width', 14);
-    rect.setAttribute('height', 5);
-    rect.setAttribute('x', x - 7);
-    rect.setAttribute('y', dur === 'w' ? midY - 5 : midY);
-    rect.setAttribute('fill', '#000');
-    svg.appendChild(rect);
-    // Dot for dotted rests
-    if (note.dotted) {
-      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      dot.setAttribute('cx', x + 10);
-      dot.setAttribute('cy', dur === 'w' ? midY - 3 : midY + 3);
-      dot.setAttribute('r', 2);
-      dot.setAttribute('fill', '#000');
-      svg.appendChild(dot);
+  // Try VexFlow Glyph first — uses embedded Bravura font, works on all platforms
+  const GLYPH_MAP = { w: 'restWhole', h: 'restHalf', q: 'restQuarter', '8': 'rest8th', '16': 'rest16th' };
+  const glyphCode = GLYPH_MAP[dur] ?? 'restQuarter';
+  let glyphDrawn = false;
+  if (V?.Glyph?.renderGlyph) {
+    try {
+      V.Glyph.renderGlyph(ctx, x, midY + 4, 30, glyphCode);
+      glyphDrawn = true;
+    } catch (_) {}
+  }
+
+  if (!glyphDrawn) {
+    if (dur === 'w' || dur === 'h') {
+      // Geometric fallback: filled rectangles
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('width', 14);
+      rect.setAttribute('height', 5);
+      rect.setAttribute('x', x - 7);
+      rect.setAttribute('y', dur === 'w' ? midY - 5 : midY);
+      rect.setAttribute('fill', '#000');
+      svg.appendChild(rect);
+    } else {
+      // SVG path fallback for quarter/8th/16th (simple zigzag approximation)
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', `M ${x-3},${midY-6} L ${x+3},${midY} L ${x-3},${midY+2} L ${x+3},${midY+8}`);
+      path.setAttribute('stroke', '#000');
+      path.setAttribute('stroke-width', '2');
+      path.setAttribute('fill', 'none');
+      svg.appendChild(path);
     }
-  } else {
-    // Quarter / 8th / 16th: Unicode musical rest glyph
-    const GLYPH = { 'q': '𝄽', '8': '𝄾', '16': '𝄿' };
-    const ch = GLYPH[dur] ?? '𝄽';
-    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    text.setAttribute('x', x);
-    text.setAttribute('y', midY + 10);
-    text.setAttribute('text-anchor', 'middle');
-    text.setAttribute('font-size', '22');
-    text.setAttribute('font-family', '"Times New Roman", serif');
-    text.setAttribute('fill', '#000');
-    text.textContent = note.dotted ? ch + '.' : ch;
-    svg.appendChild(text);
+  }
+
+  // Dot for dotted rests
+  if (note.dotted) {
+    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    dot.setAttribute('cx', x + 12);
+    dot.setAttribute('cy', midY + 2);
+    dot.setAttribute('r', 2);
+    dot.setAttribute('fill', '#000');
+    svg.appendChild(dot);
   }
 }
 

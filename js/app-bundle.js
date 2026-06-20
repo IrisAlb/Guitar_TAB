@@ -486,14 +486,14 @@
         if (!note.isRest) return;
         try {
           const x2 = staveNotes[i].getAbsoluteX();
-          drawTabRestSymbol(svg, note, x2, tabStave);
+          drawTabRestSymbol(svg, note, x2, tabStave, ctx, V);
         } catch (_) {
         }
       });
     }
     return { tabStave, staveNotes, tabNotes };
   }
-  function drawTabRestSymbol(svg, note, x, tabStave) {
+  function drawTabRestSymbol(svg, note, x, tabStave, ctx, V) {
     let midY;
     try {
       midY = tabStave.getYForLine(1.5);
@@ -501,34 +501,41 @@
       midY = TAB_Y + 45;
     }
     const dur = note.duration;
-    if (dur === "w" || dur === "h") {
-      const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      rect.setAttribute("width", 14);
-      rect.setAttribute("height", 5);
-      rect.setAttribute("x", x - 7);
-      rect.setAttribute("y", dur === "w" ? midY - 5 : midY);
-      rect.setAttribute("fill", "#000");
-      svg.appendChild(rect);
-      if (note.dotted) {
-        const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        dot.setAttribute("cx", x + 10);
-        dot.setAttribute("cy", dur === "w" ? midY - 3 : midY + 3);
-        dot.setAttribute("r", 2);
-        dot.setAttribute("fill", "#000");
-        svg.appendChild(dot);
+    const GLYPH_MAP = { w: "restWhole", h: "restHalf", q: "restQuarter", "8": "rest8th", "16": "rest16th" };
+    const glyphCode = GLYPH_MAP[dur] ?? "restQuarter";
+    let glyphDrawn = false;
+    if (V?.Glyph?.renderGlyph) {
+      try {
+        V.Glyph.renderGlyph(ctx, x, midY + 4, 30, glyphCode);
+        glyphDrawn = true;
+      } catch (_) {
       }
-    } else {
-      const GLYPH = { "q": "\u{1D13D}", "8": "\u{1D13E}", "16": "\u{1D13F}" };
-      const ch = GLYPH[dur] ?? "\u{1D13D}";
-      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      text.setAttribute("x", x);
-      text.setAttribute("y", midY + 10);
-      text.setAttribute("text-anchor", "middle");
-      text.setAttribute("font-size", "22");
-      text.setAttribute("font-family", '"Times New Roman", serif');
-      text.setAttribute("fill", "#000");
-      text.textContent = note.dotted ? ch + "." : ch;
-      svg.appendChild(text);
+    }
+    if (!glyphDrawn) {
+      if (dur === "w" || dur === "h") {
+        const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        rect.setAttribute("width", 14);
+        rect.setAttribute("height", 5);
+        rect.setAttribute("x", x - 7);
+        rect.setAttribute("y", dur === "w" ? midY - 5 : midY);
+        rect.setAttribute("fill", "#000");
+        svg.appendChild(rect);
+      } else {
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", `M ${x - 3},${midY - 6} L ${x + 3},${midY} L ${x - 3},${midY + 2} L ${x + 3},${midY + 8}`);
+        path.setAttribute("stroke", "#000");
+        path.setAttribute("stroke-width", "2");
+        path.setAttribute("fill", "none");
+        svg.appendChild(path);
+      }
+    }
+    if (note.dotted) {
+      const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      dot.setAttribute("cx", x + 12);
+      dot.setAttribute("cy", midY + 2);
+      dot.setAttribute("r", 2);
+      dot.setAttribute("fill", "#000");
+      svg.appendChild(dot);
     }
   }
   function drawTie(ctx, V, sn0, sn1, tn0, tn1) {
