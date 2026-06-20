@@ -15,6 +15,7 @@ export function init() {
     durBtns:      [...document.querySelectorAll('.dur-btn[data-duration]')],
     numBtns:      [...document.querySelectorAll('.num-btn[data-digit]')],
     techBtns:     [...document.querySelectorAll('.tech-btn[data-technique]')],
+    strBtns:      [...document.querySelectorAll('.str-btn[data-string]')],
   };
   bindEvents();
 }
@@ -33,6 +34,13 @@ function bindEvents() {
 
   dom.btnRest.addEventListener('click', () => {
     dispatch({ type: 'ADD_REST' });
+  });
+
+  // ── 弦選択 ──────────────────────────────────
+  dom.strBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      dispatch({ type: 'TAP_STRING', payload: { string: parseInt(btn.dataset.string, 10) } });
+    });
   });
 
   // ── テンキー ────────────────────────────────
@@ -66,7 +74,6 @@ function bindEvents() {
     window.print();
   });
 
-  // PNG出力は Step 10 で実装（現時点ではプレースホルダー）
   dom.btnExportPng.addEventListener('click', () => {
     alert('PNG出力は近日実装予定です');
   });
@@ -76,6 +83,7 @@ export function update(state) {
   const { input, selection, score } = state;
 
   updateDurationButtons(input);
+  updateStringButtons(input);
   updateFretDisplay(input);
   updateTechButtons(selection, score);
   syncTitle(score);
@@ -88,13 +96,21 @@ function updateDurationButtons(input) {
   dom.btnDotted.classList.toggle('active', input.dotted);
 }
 
+function updateStringButtons(input) {
+  dom.strBtns.forEach(btn => {
+    const isActive = input.awaitingFret &&
+                     parseInt(btn.dataset.string, 10) === input.targetString;
+    btn.classList.toggle('active', isActive);
+  });
+}
+
 function updateFretDisplay(input) {
   if (input.awaitingFret) {
     dom.fretDisplay.className = 'waiting';
     dom.fretDisplay.textContent = input.pendingFret === '' ? '──' : input.pendingFret;
   } else {
     dom.fretDisplay.className = 'idle';
-    dom.fretDisplay.textContent = '弦をタップして入力';
+    dom.fretDisplay.textContent = '──';
   }
 }
 
@@ -116,7 +132,6 @@ function updateTechButtons(selection, score) {
 }
 
 function syncTitle(score) {
-  // Don't overwrite while the user is typing
   if (document.activeElement !== dom.titleInput) {
     dom.titleInput.value = score.title;
   }

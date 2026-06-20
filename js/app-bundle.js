@@ -453,7 +453,8 @@
       btnPrint: document.getElementById("btn-print"),
       durBtns: [...document.querySelectorAll(".dur-btn[data-duration]")],
       numBtns: [...document.querySelectorAll(".num-btn[data-digit]")],
-      techBtns: [...document.querySelectorAll(".tech-btn[data-technique]")]
+      techBtns: [...document.querySelectorAll(".tech-btn[data-technique]")],
+      strBtns: [...document.querySelectorAll(".str-btn[data-string]")]
     };
     bindEvents();
   }
@@ -468,6 +469,11 @@
     });
     dom.btnRest.addEventListener("click", () => {
       dispatch({ type: "ADD_REST" });
+    });
+    dom.strBtns.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        dispatch({ type: "TAP_STRING", payload: { string: parseInt(btn.dataset.string, 10) } });
+      });
     });
     dom.numBtns.forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -498,6 +504,7 @@
   function update(state2) {
     const { input, selection, score } = state2;
     updateDurationButtons(input);
+    updateStringButtons(input);
     updateFretDisplay(input);
     updateTechButtons(selection, score);
     syncTitle(score);
@@ -508,13 +515,19 @@
     });
     dom.btnDotted.classList.toggle("active", input.dotted);
   }
+  function updateStringButtons(input) {
+    dom.strBtns.forEach((btn) => {
+      const isActive = input.awaitingFret && parseInt(btn.dataset.string, 10) === input.targetString;
+      btn.classList.toggle("active", isActive);
+    });
+  }
   function updateFretDisplay(input) {
     if (input.awaitingFret) {
       dom.fretDisplay.className = "waiting";
       dom.fretDisplay.textContent = input.pendingFret === "" ? "\u2500\u2500" : input.pendingFret;
     } else {
       dom.fretDisplay.className = "idle";
-      dom.fretDisplay.textContent = "\u5F26\u3092\u30BF\u30C3\u30D7\u3057\u3066\u5165\u529B";
+      dom.fretDisplay.textContent = "\u2500\u2500";
     }
   }
   function updateTechButtons(selection, score) {
