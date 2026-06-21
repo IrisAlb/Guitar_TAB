@@ -368,8 +368,8 @@
 
   // js/renderer.js
   var STAVE_Y = 10;
-  var TAB_Y = 115;
-  var CANVAS_H = 195;
+  var TAB_Y = 110;
+  var CANVAS_H = 215;
   var X_MARGIN = 10;
   var NOTE_SLOT_W = 28;
   var MEASURE_PAD = 18;

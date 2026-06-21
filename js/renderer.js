@@ -5,8 +5,8 @@ import { dispatch } from './store.js';
 //   4/4 quarter-note measures → ~5 per row at 720px (industry norm: 4-5/row)
 //   System height ≈ 53mm fits 4-5 systems per A4 page
 const STAVE_Y     = 10;
-const TAB_Y       = 115;   // tightened from 120 to reduce gap between staves
-const CANVAS_H    = 195;   // was 230; TAB bottom ≈ 165 + 30px margin
+const TAB_Y       = 110;   // tightened from 120; leaves ~105px for TAB stave content
+const CANVAS_H    = 215;   // 105px below TAB_Y — sufficient for 4 strings + B label
 const X_MARGIN    = 10;
 const NOTE_SLOT_W = 28;    // was 52; 5 quarter-note measures fit in PRINT_W
 const MEASURE_PAD = 18;    // was 24
