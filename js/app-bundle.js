@@ -368,12 +368,12 @@
 
   // js/renderer.js
   var STAVE_Y = 10;
-  var TAB_Y = 120;
-  var CANVAS_H = 230;
+  var TAB_Y = 115;
+  var CANVAS_H = 195;
   var X_MARGIN = 10;
-  var NOTE_SLOT_W = 52;
-  var MEASURE_PAD = 24;
-  var CLEF_W = 80;
+  var NOTE_SLOT_W = 28;
+  var MEASURE_PAD = 18;
+  var CLEF_W = 58;
   var NUM_STRINGS = 4;
   var PRINT_W = 720;
   var renderedMeasures = [];

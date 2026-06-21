@@ -1,15 +1,18 @@
 import { pitchToVexKey } from './model.js';
 import { dispatch } from './store.js';
 
+// Layout constants — tuned for A4 professional bass TAB standard:
+//   4/4 quarter-note measures → ~5 per row at 720px (industry norm: 4-5/row)
+//   System height ≈ 53mm fits 4-5 systems per A4 page
 const STAVE_Y     = 10;
-const TAB_Y       = 120;
-const CANVAS_H    = 230;
+const TAB_Y       = 115;   // tightened from 120 to reduce gap between staves
+const CANVAS_H    = 195;   // was 230; TAB bottom ≈ 165 + 30px margin
 const X_MARGIN    = 10;
-const NOTE_SLOT_W = 52;
-const MEASURE_PAD = 24;
-const CLEF_W      = 80;
+const NOTE_SLOT_W = 28;    // was 52; 5 quarter-note measures fit in PRINT_W
+const MEASURE_PAD = 18;    // was 24
+const CLEF_W      = 58;    // was 80
 const NUM_STRINGS  = 4;
-const PRINT_W     = 720; // usable print width per system row
+const PRINT_W     = 720;   // A4 usable width (210mm - 20mm margins ≈ 720px)
 
 // Populated each render(); consumed by scrollToCursor
 let renderedMeasures = [];
