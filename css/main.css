@@ -70,17 +70,18 @@ body {
 /* ── Score area ──────────────────────────────────── */
 #score-area {
   flex: 1 1 0;
-  overflow-x: hidden;
+  overflow-x: auto;
   overflow-y: auto;
   background: var(--score-bg);
   -webkit-overflow-scrolling: touch;
-  touch-action: pan-y;
+  touch-action: pan-x pan-y;
   position: relative;
 }
 
 #score-canvas {
   display: block;
-  width: 100%;
+  /* min-width allows rows wider than viewport to scroll horizontally */
+  min-width: min-content;
 }
 
 .score-row svg {

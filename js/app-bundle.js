@@ -407,7 +407,7 @@
     container.innerHTML = "";
     renderedMeasures = [];
     const { measures } = score;
-    const systemW = Math.max(300, scoreArea.clientWidth);
+    const systemW = Math.max(PRINT_W, scoreArea.clientWidth);
     const systems = groupIntoSystems(measures, systemW);
     systems.forEach((mIndices, si) => {
       const sysMeasures = mIndices.map((mi) => measures[mi]);

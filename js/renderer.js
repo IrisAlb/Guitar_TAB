@@ -49,7 +49,9 @@ export function render(score, cursor, _selection) {
   renderedMeasures = [];
 
   const { measures } = score;
-  const systemW = Math.max(300, scoreArea.clientWidth);
+  // Use at least PRINT_W so each row holds the same number of measures as print.
+  // On wider displays (tablet/desktop) the actual width is used instead.
+  const systemW = Math.max(PRINT_W, scoreArea.clientWidth);
   const systems = groupIntoSystems(measures, systemW);
 
   systems.forEach((mIndices, si) => {
