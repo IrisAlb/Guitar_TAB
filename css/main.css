@@ -70,18 +70,21 @@ body {
 /* ── Score area ──────────────────────────────────── */
 #score-area {
   flex: 1 1 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--score-bg);
   -webkit-overflow-scrolling: touch;
-  touch-action: pan-x;
+  touch-action: pan-y;
   position: relative;
 }
 
 #score-canvas {
-  display: inline-block;
-  min-width: 100%;
-  /* height is determined by VexFlow SVG; do not force 100% */
+  display: block;
+  width: 100%;
+}
+
+.score-row svg {
+  display: block;
 }
 
 /* ── Input panel ─────────────────────────────────── */
