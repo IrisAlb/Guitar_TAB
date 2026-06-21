@@ -630,12 +630,15 @@
       const clefW = snx - sx;
       const topY = tabStave.getYForLine(0);
       const botY = tabStave.getYForLine(numStrings - 1);
+      const spacing = numStrings > 1 ? (botY - topY) / (numStrings - 1) : 13;
       const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
       bg.setAttribute("x", sx);
-      bg.setAttribute("y", TAB_Y - 2);
+      bg.setAttribute("y", topY - spacing);
       bg.setAttribute("width", clefW);
-      bg.setAttribute("height", botY - TAB_Y + 20);
+      bg.setAttribute("height", botY - topY + spacing * 2);
       bg.setAttribute("fill", "#fff");
+      bg.setAttribute("stroke", "none");
+      bg.setAttribute("stroke-width", "0");
       svg.appendChild(bg);
       for (let s = 0; s < numStrings; s++) {
         const ly = tabStave.getYForLine(s);

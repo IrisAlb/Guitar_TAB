@@ -297,19 +297,22 @@ function renderMeasure(ctx, V, measure, x, width, isFirst, isSystemStart = false
 // Keeps the clef in the stave model (for noteStartX alignment) but overwrites visually.
 function overwriteTabLabel(svg, tabStave, numStrings) {
   try {
-    const sx   = tabStave.getX();
-    const snx  = tabStave.getNoteStartX();    // right edge of the clef area
-    const clefW = snx - sx;
-    const topY  = tabStave.getYForLine(0);
-    const botY  = tabStave.getYForLine(numStrings - 1);
+    const sx      = tabStave.getX();
+    const snx     = tabStave.getNoteStartX();   // right edge of the clef area
+    const clefW   = snx - sx;
+    const topY    = tabStave.getYForLine(0);
+    const botY    = tabStave.getYForLine(numStrings - 1);
+    const spacing = numStrings > 1 ? (botY - topY) / (numStrings - 1) : 13;
 
-    // White rect covering the entire clef column (hides VexFlow's fixed-size glyph)
+    // White rect covering only the glyph area — no stroke to avoid visible border
     const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    bg.setAttribute('x',      sx);
-    bg.setAttribute('y',      TAB_Y - 2);
-    bg.setAttribute('width',  clefW);
-    bg.setAttribute('height', botY - TAB_Y + 20);
-    bg.setAttribute('fill',   '#fff');
+    bg.setAttribute('x',            sx);
+    bg.setAttribute('y',            topY - spacing);
+    bg.setAttribute('width',        clefW);
+    bg.setAttribute('height',       botY - topY + spacing * 2);
+    bg.setAttribute('fill',         '#fff');
+    bg.setAttribute('stroke',       'none');
+    bg.setAttribute('stroke-width', '0');
     svg.appendChild(bg);
 
     // Redraw stave lines over the white rect so they're not broken
