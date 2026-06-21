@@ -15,8 +15,16 @@ export const TECHNIQUE = {
   GHOST:     'X',
 };
 
-// MIDI note numbers for open strings: E1=28, A1=33, D2=38, G2=43
+// MIDI note numbers for open strings (index 0 = lowest string)
+// 4-string: E1, A1, D2, G2
+// 5-string: B0, E1, A1, D2, G2
+// 6-string: B0, E1, A1, D2, G2, C3
 export const STANDARD_BASS_TUNING = [28, 33, 38, 43];
+export const BASS_TUNINGS = {
+  4: [28, 33, 38, 43],
+  5: [23, 28, 33, 38, 43],
+  6: [23, 28, 33, 38, 43, 48],
+};
 export const MAX_FRET = 20;
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -92,6 +100,7 @@ export class Note {
     string      = 0,
     fret        = 0,
     pitch       = null,
+    tuning      = null,   // tuning array for pitch computation; defaults to STANDARD_BASS_TUNING
     techniques  = [],
     tiedToNext  = false,  // this note has a tie arc going to the next note
     isTied      = false,  // this note is the continuation of a preceding tied note
@@ -101,7 +110,9 @@ export class Note {
     this.isRest     = isRest;
     this.string     = string;
     this.fret       = fret;
-    this.pitch      = pitch ?? midiToPitch(STANDARD_BASS_TUNING[string] + fret);
+    const openStrings = tuning ?? STANDARD_BASS_TUNING;
+    const openMidi    = openStrings[string] ?? 28; // fallback to E1 if string out of range
+    this.pitch      = pitch ?? midiToPitch(openMidi + fret);
     this.techniques = [...techniques];
     this.tiedToNext = tiedToNext;
     this.isTied     = isTied;
@@ -143,20 +154,23 @@ export class Measure {
 }
 
 export class Score {
-  constructor({ title = '無題', tuning = [...STANDARD_BASS_TUNING], measures = [] } = {}) {
-    this.title    = title;
-    this.tuning   = [...tuning];
-    this.measures = measures.length > 0
+  constructor({ title = '無題', numStrings = 4, tuning = null, measures = [] } = {}) {
+    this.title      = title;
+    this.numStrings = numStrings;
+    this.tuning     = tuning ? [...tuning] : [...(BASS_TUNINGS[numStrings] ?? STANDARD_BASS_TUNING)];
+    this.measures   = measures.length > 0
       ? measures.map(m => (m instanceof Measure ? m : new Measure(m)))
       : [new Measure()];
   }
 }
 
 export function deserializeScore(data) {
+  const numStrings = data.numStrings ?? 4;
   return new Score({
-    title:    data.title,
-    tuning:   data.tuning,
-    measures: (data.measures ?? []).map(m =>
+    title:      data.title,
+    numStrings,
+    tuning:     data.tuning,
+    measures:   (data.measures ?? []).map(m =>
       new Measure({
         timeSignature: m.timeSignature,
         notes: (m.notes ?? []).map(n => new Note(n)),

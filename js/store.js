@@ -1,4 +1,4 @@
-import { Score, Measure, Note, deserializeScore, MAX_FRET, splitTicks } from './model.js';
+import { Score, Measure, Note, deserializeScore, MAX_FRET, BASS_TUNINGS, splitTicks } from './model.js';
 
 const STORAGE_KEY = 'bass_tab_v1';
 const UNDO_LIMIT  = 50;
@@ -150,7 +150,7 @@ function handleAction({ type, payload = {} }) {
 
     case 'CONFIRM_FRET': {
       if (!state.input.awaitingFret) break;
-      if (state.input.targetString < 0 || state.input.targetString > 3) {
+      if (state.input.targetString < 0 || state.input.targetString >= state.score.numStrings) {
         resetFretInput();
         break;
       }
@@ -159,6 +159,7 @@ function handleAction({ type, payload = {} }) {
         : parseInt(state.input.pendingFret, 10);
 
       pushUndo();
+      const tuning = state.score.tuning;
 
       // Total ticks of the selected note value
       const totalTicks = new Note({
@@ -167,6 +168,7 @@ function handleAction({ type, payload = {} }) {
         isRest:   false,
         string:   state.input.targetString,
         fret,
+        tuning,
       }).ticks;
 
       let ticksLeft = totalTicks;
@@ -191,6 +193,7 @@ function handleAction({ type, payload = {} }) {
             isRest:     false,
             string:     state.input.targetString,
             fret,
+            tuning,
             isTied:     !isFirst,
             tiedToNext: !isLastPart || !isLastChunk,
           });
@@ -274,6 +277,20 @@ function handleAction({ type, payload = {} }) {
       if (state.cursor.measureIndex >= state.score.measures.length) {
         state.cursor.measureIndex = state.score.measures.length - 1;
         state.cursor.beatTick     = 0;
+      }
+      break;
+    }
+
+    case 'SET_NUM_STRINGS': {
+      const n = payload.numStrings;
+      if (n !== 4 && n !== 5 && n !== 6) break;
+      state.score.numStrings = n;
+      state.score.tuning     = [...BASS_TUNINGS[n]];
+      // Cancel any pending string input that's now out of range
+      if (state.input.targetString >= n) {
+        state.input.targetString = -1;
+        state.input.awaitingFret = false;
+        state.input.pendingFret  = '';
       }
       break;
     }

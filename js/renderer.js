@@ -5,14 +5,15 @@ import { dispatch } from './store.js';
 //   4/4 quarter-note measures → ~5 per row at 720px (industry norm: 4-5/row)
 //   System height ≈ 53mm fits 4-5 systems per A4 page
 const STAVE_Y     = 10;
-const TAB_Y       = 110;   // tightened from 120; leaves ~105px for TAB stave content
-const CANVAS_H    = 215;   // 105px below TAB_Y — sufficient for 4 strings + B label
+const TAB_Y       = 110;
 const X_MARGIN    = 10;
-const NOTE_SLOT_W = 28;    // was 52; 5 quarter-note measures fit in PRINT_W
-const MEASURE_PAD = 18;    // was 24
-const CLEF_W      = 58;    // was 80
-const NUM_STRINGS  = 4;
+const NOTE_SLOT_W = 28;
+const MEASURE_PAD = 18;
+const CLEF_W      = 58;
 const PRINT_W     = 720;   // A4 usable width (210mm - 20mm margins ≈ 720px)
+
+// TAB stave height grows with string count: ~13px per line + 50px for label/padding
+function tabCanvasH(numStrings) { return TAB_Y + numStrings * 13 + 50; }
 
 // Populated each render(); consumed by scrollToCursor
 let renderedMeasures = [];
@@ -52,6 +53,8 @@ export function render(score, cursor, _selection) {
   renderedMeasures = [];
 
   const { measures } = score;
+  const numStrings = score.numStrings ?? 4;
+  const canvasH    = tabCanvasH(numStrings);
   // Use at least PRINT_W so each row holds the same number of measures as print.
   // On wider displays (tablet/desktop) the actual width is used instead.
   const systemW = Math.max(PRINT_W, scoreArea.clientWidth);
@@ -67,7 +70,7 @@ export function render(score, cursor, _selection) {
     container.appendChild(rowDiv);
 
     const renderer = new V.Renderer(rowDiv, V.Renderer.Backends.SVG);
-    renderer.resize(totalW, CANVAS_H);
+    renderer.resize(totalW, canvasH);
     const ctx = renderer.getContext();
     activeSvg = rowDiv.querySelector('svg');
 
@@ -80,7 +83,7 @@ export function render(score, cursor, _selection) {
       hilite.setAttribute('x', hx);
       hilite.setAttribute('y', STAVE_Y - 5);
       hilite.setAttribute('width', sysWidths[localIdx]);
-      hilite.setAttribute('height', CANVAS_H);
+      hilite.setAttribute('height', canvasH);
       hilite.setAttribute('fill', 'rgba(74, 144, 226, 0.12)');
       hilite.setAttribute('pointer-events', 'none');
       activeSvg.appendChild(hilite);
@@ -95,7 +98,7 @@ export function render(score, cursor, _selection) {
       try {
         const isFirst       = si === 0 && idx === 0;
         const isSystemStart = idx === 0 && !isFirst;
-        const result = renderMeasure(ctx, V, measure, x, sysWidths[idx], isFirst, isSystemStart);
+        const result = renderMeasure(ctx, V, measure, x, sysWidths[idx], isFirst, isSystemStart, numStrings);
 
         const rm = { x, width: sysWidths[idx], tabStave: result.tabStave, mi, rowDiv };
         renderedMeasures.push(rm);
@@ -125,7 +128,7 @@ export function render(score, cursor, _selection) {
       x += sysWidths[idx];
     });
 
-    attachTapHandler(activeSvg, sysRendered);
+    attachTapHandler(activeSvg, sysRendered, numStrings);
   });
 
   scrollToCursor(cursor);
@@ -141,6 +144,8 @@ export function renderPrint(score) {
   container.innerHTML = '';
 
   const { measures } = score;
+  const numStrings = score.numStrings ?? 4;
+  const canvasH    = tabCanvasH(numStrings);
 
   const titleEl = document.createElement('p');
   titleEl.className = 'print-title';
@@ -159,7 +164,7 @@ export function renderPrint(score) {
     const totalW      = sysWidths.reduce((a, b) => a + b, 0) + X_MARGIN * 2;
 
     const renderer = new V.Renderer(rowDiv, V.Renderer.Backends.SVG);
-    renderer.resize(totalW, CANVAS_H);
+    renderer.resize(totalW, canvasH);
     const ctx = renderer.getContext();
     activeSvg = rowDiv.querySelector('svg');
 
@@ -170,7 +175,7 @@ export function renderPrint(score) {
       try {
         const isFirst       = si === 0 && idx === 0;
         const isSystemStart = idx === 0 && !isFirst;
-        const result = renderMeasure(ctx, V, measure, x, sysWidths[idx], isFirst, isSystemStart);
+        const result = renderMeasure(ctx, V, measure, x, sysWidths[idx], isFirst, isSystemStart, numStrings);
 
         if (prevResult && idx > 0) {
           const prevM    = sysMeasures[idx - 1];
@@ -219,20 +224,20 @@ function calcWidth(measure, isFirst) {
   return slots * NOTE_SLOT_W + MEASURE_PAD + (isFirst ? CLEF_W : 0);
 }
 
-function renderMeasure(ctx, V, measure, x, width, isFirst, isSystemStart = false) {
+function renderMeasure(ctx, V, measure, x, width, isFirst, isSystemStart = false, numStrings = 4) {
   const stave = new V.Stave(x, STAVE_Y, width);
   if (isFirst)            stave.addClef('bass').addTimeSignature('4/4');
   else if (isSystemStart) stave.addClef('bass');
   stave.setContext(ctx).draw();
 
-  const tabStave = new V.TabStave(x, TAB_Y, width, { num_lines: NUM_STRINGS });
+  const tabStave = new V.TabStave(x, TAB_Y, width, { numLines: numStrings });
   if (isFirst || isSystemStart) tabStave.addTabGlyph();
   tabStave.setContext(ctx).draw();
 
   if (measure.notes.length === 0) return { tabStave, staveNotes: [], tabNotes: [] };
 
   const staveNotes = measure.notes.map(n => toStaveNote(n, V));
-  const tabNotes   = measure.notes.map(n => toTabNote(n, V));
+  const tabNotes   = measure.notes.map(n => toTabNote(n, V, numStrings));
 
   const { beats, value } = measure.timeSignature;
   const SOFT = V.Voice.Mode?.SOFT ?? 2;
@@ -382,10 +387,10 @@ function toStaveNote(note, V) {
   return sn;
 }
 
-function toTabNote(note, V) {
+function toTabNote(note, V, numStrings = 4) {
   if (note.isRest) return new V.GhostNote(note.vexDuration);
   const tn = new V.TabNote({
-    positions: [{ str: NUM_STRINGS - note.string, fret: note.fret }],
+    positions: [{ str: numStrings - note.string, fret: note.fret }],
     duration: note.vexDuration,
   });
   if (note.dotted && V.Dot) V.Dot.buildAndAttach([tn], { index: 0 });
@@ -393,7 +398,7 @@ function toTabNote(note, V) {
 }
 
 // ── Tap handler: attached per system SVG ─────────────────────────────────
-function attachTapHandler(svg, sysRendered) {
+function attachTapHandler(svg, sysRendered, numStrings = 4) {
   if (!svg || sysRendered.length === 0) return;
 
   svg.style.cursor = 'pointer';
@@ -426,14 +431,14 @@ function attachTapHandler(svg, sysRendered) {
 
     let lineYs;
     try {
-      lineYs = Array.from({ length: NUM_STRINGS }, (_, i) => found.tabStave.getYForLine(i));
+      lineYs = Array.from({ length: numStrings }, (_, i) => found.tabStave.getYForLine(i));
     } catch {
-      lineYs = Array.from({ length: NUM_STRINGS }, (_, i) => TAB_Y + (i + 1) * 13);
+      lineYs = Array.from({ length: numStrings }, (_, i) => TAB_Y + (i + 1) * 13);
     }
 
     const spacing = lineYs.length > 1 ? lineYs[1] - lineYs[0] : 13;
     const topY    = lineYs[0] - spacing;
-    const bottomY = lineYs[NUM_STRINGS - 1] + spacing;
+    const bottomY = lineYs[numStrings - 1] + spacing;
     if (svgY < topY || svgY > bottomY) return;
 
     let closestIdx = 0, minDist = Infinity;
@@ -442,7 +447,7 @@ function attachTapHandler(svg, sysRendered) {
       if (d < minDist) { minDist = d; closestIdx = i; }
     });
 
-    const ourString = (NUM_STRINGS - 1) - closestIdx;
+    const ourString = (numStrings - 1) - closestIdx;
     dispatch({ type: 'TAP_STRING', payload: { string: ourString } });
   }
 }

@@ -12,6 +12,9 @@
   <!-- ── Header ───────────────────────────────── -->
   <header id="header">
     <input id="title-input" type="text" value="無題" maxlength="64" spellcheck="false" aria-label="曲タイトル">
+    <button class="str-count-btn active" data-strings="4" title="4弦">4</button>
+    <button class="str-count-btn"        data-strings="5" title="5弦">5</button>
+    <button class="str-count-btn"        data-strings="6" title="6弦">6</button>
     <button class="header-btn" id="btn-export-png" title="PNG保存">↓</button>
     <button class="header-btn" id="btn-print"      title="印刷 / PDF">⎙</button>
   </header>
@@ -38,13 +41,8 @@
       <button class="dur-btn"            id="btn-rest"      >休符</button>
     </div>
 
-    <!-- 弦選択ボタン -->
-    <div id="string-row">
-      <button class="str-btn" data-string="3">G弦</button>
-      <button class="str-btn" data-string="2">D弦</button>
-      <button class="str-btn" data-string="1">A弦</button>
-      <button class="str-btn" data-string="0">E弦</button>
-    </div>
+    <!-- 弦選択ボタン (JS で動的生成) -->
+    <div id="string-row"></div>
 
     <!-- フレット入力の表示 -->
     <div id="fret-display" class="idle">──</div>

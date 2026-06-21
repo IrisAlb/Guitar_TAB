@@ -8,6 +8,11 @@
     SIXTEENTH: "16"
   };
   var STANDARD_BASS_TUNING = [28, 33, 38, 43];
+  var BASS_TUNINGS = {
+    4: [28, 33, 38, 43],
+    5: [23, 28, 33, 38, 43],
+    6: [23, 28, 33, 38, 43, 48]
+  };
   var MAX_FRET = 20;
   var NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
   var BASE_TICKS = { w: 4096, h: 2048, q: 1024, "8": 512, "16": 256 };
@@ -47,6 +52,8 @@
       string = 0,
       fret = 0,
       pitch = null,
+      tuning = null,
+      // tuning array for pitch computation; defaults to STANDARD_BASS_TUNING
       techniques = [],
       tiedToNext = false,
       // this note has a tie arc going to the next note
@@ -58,7 +65,9 @@
       this.isRest = isRest;
       this.string = string;
       this.fret = fret;
-      this.pitch = pitch ?? midiToPitch(STANDARD_BASS_TUNING[string] + fret);
+      const openStrings = tuning ?? STANDARD_BASS_TUNING;
+      const openMidi = openStrings[string] ?? 28;
+      this.pitch = pitch ?? midiToPitch(openMidi + fret);
       this.techniques = [...techniques];
       this.tiedToNext = tiedToNext;
       this.isTied = isTied;
@@ -92,15 +101,18 @@
     }
   };
   var Score = class {
-    constructor({ title = "\u7121\u984C", tuning = [...STANDARD_BASS_TUNING], measures = [] } = {}) {
+    constructor({ title = "\u7121\u984C", numStrings = 4, tuning = null, measures = [] } = {}) {
       this.title = title;
-      this.tuning = [...tuning];
+      this.numStrings = numStrings;
+      this.tuning = tuning ? [...tuning] : [...BASS_TUNINGS[numStrings] ?? STANDARD_BASS_TUNING];
       this.measures = measures.length > 0 ? measures.map((m) => m instanceof Measure ? m : new Measure(m)) : [new Measure()];
     }
   };
   function deserializeScore(data) {
+    const numStrings = data.numStrings ?? 4;
     return new Score({
       title: data.title,
+      numStrings,
       tuning: data.tuning,
       measures: (data.measures ?? []).map(
         (m) => new Measure({
@@ -240,18 +252,20 @@
       }
       case "CONFIRM_FRET": {
         if (!state.input.awaitingFret) break;
-        if (state.input.targetString < 0 || state.input.targetString > 3) {
+        if (state.input.targetString < 0 || state.input.targetString >= state.score.numStrings) {
           resetFretInput();
           break;
         }
         const fret = state.input.pendingFret === "" ? 0 : parseInt(state.input.pendingFret, 10);
         pushUndo();
+        const tuning = state.score.tuning;
         const totalTicks = new Note({
           duration: state.input.duration,
           dotted: state.input.dotted,
           isRest: false,
           string: state.input.targetString,
-          fret
+          fret,
+          tuning
         }).ticks;
         let ticksLeft = totalTicks;
         let isFirst = true;
@@ -271,6 +285,7 @@
               isRest: false,
               string: state.input.targetString,
               fret,
+              tuning,
               isTied: !isFirst,
               tiedToNext: !isLastPart || !isLastChunk
             });
@@ -345,6 +360,18 @@
         }
         break;
       }
+      case "SET_NUM_STRINGS": {
+        const n = payload.numStrings;
+        if (n !== 4 && n !== 5 && n !== 6) break;
+        state.score.numStrings = n;
+        state.score.tuning = [...BASS_TUNINGS[n]];
+        if (state.input.targetString >= n) {
+          state.input.targetString = -1;
+          state.input.awaitingFret = false;
+          state.input.pendingFret = "";
+        }
+        break;
+      }
       case "SET_TITLE": {
         state.score.title = payload.title;
         break;
@@ -369,13 +396,14 @@
   // js/renderer.js
   var STAVE_Y = 10;
   var TAB_Y = 110;
-  var CANVAS_H = 215;
   var X_MARGIN = 10;
   var NOTE_SLOT_W = 28;
   var MEASURE_PAD = 18;
   var CLEF_W = 58;
-  var NUM_STRINGS = 4;
   var PRINT_W = 720;
+  function tabCanvasH(numStrings) {
+    return TAB_Y + numStrings * 13 + 50;
+  }
   var renderedMeasures = [];
   var activeSvg = null;
   function groupIntoSystems(measures, systemW) {
@@ -407,6 +435,8 @@
     container.innerHTML = "";
     renderedMeasures = [];
     const { measures } = score;
+    const numStrings = score.numStrings ?? 4;
+    const canvasH = tabCanvasH(numStrings);
     const systemW = Math.max(PRINT_W, scoreArea.clientWidth);
     const systems = groupIntoSystems(measures, systemW);
     systems.forEach((mIndices, si) => {
@@ -417,7 +447,7 @@
       rowDiv.className = "score-row";
       container.appendChild(rowDiv);
       const renderer = new V.Renderer(rowDiv, V.Renderer.Backends.SVG);
-      renderer.resize(totalW, CANVAS_H);
+      renderer.resize(totalW, canvasH);
       const ctx = renderer.getContext();
       activeSvg = rowDiv.querySelector("svg");
       if (activeSvg && mIndices.includes(cursor.measureIndex)) {
@@ -428,7 +458,7 @@
         hilite.setAttribute("x", hx);
         hilite.setAttribute("y", STAVE_Y - 5);
         hilite.setAttribute("width", sysWidths[localIdx]);
-        hilite.setAttribute("height", CANVAS_H);
+        hilite.setAttribute("height", canvasH);
         hilite.setAttribute("fill", "rgba(74, 144, 226, 0.12)");
         hilite.setAttribute("pointer-events", "none");
         activeSvg.appendChild(hilite);
@@ -441,7 +471,7 @@
         try {
           const isFirst = si === 0 && idx === 0;
           const isSystemStart = idx === 0 && !isFirst;
-          const result = renderMeasure(ctx, V, measure, x, sysWidths[idx], isFirst, isSystemStart);
+          const result = renderMeasure(ctx, V, measure, x, sysWidths[idx], isFirst, isSystemStart, numStrings);
           const rm = { x, width: sysWidths[idx], tabStave: result.tabStave, mi, rowDiv };
           renderedMeasures.push(rm);
           sysRendered.push(rm);
@@ -470,7 +500,7 @@
         }
         x += sysWidths[idx];
       });
-      attachTapHandler(activeSvg, sysRendered);
+      attachTapHandler(activeSvg, sysRendered, numStrings);
     });
     scrollToCursor(cursor);
   }
@@ -481,6 +511,8 @@
     if (!container) return;
     container.innerHTML = "";
     const { measures } = score;
+    const numStrings = score.numStrings ?? 4;
+    const canvasH = tabCanvasH(numStrings);
     const titleEl = document.createElement("p");
     titleEl.className = "print-title";
     titleEl.textContent = score.title;
@@ -494,7 +526,7 @@
       const sysWidths = sysMeasures.map((m, i) => calcWidth(m, i === 0));
       const totalW = sysWidths.reduce((a, b) => a + b, 0) + X_MARGIN * 2;
       const renderer = new V.Renderer(rowDiv, V.Renderer.Backends.SVG);
-      renderer.resize(totalW, CANVAS_H);
+      renderer.resize(totalW, canvasH);
       const ctx = renderer.getContext();
       activeSvg = rowDiv.querySelector("svg");
       let x = X_MARGIN;
@@ -503,7 +535,7 @@
         try {
           const isFirst = si === 0 && idx === 0;
           const isSystemStart = idx === 0 && !isFirst;
-          const result = renderMeasure(ctx, V, measure, x, sysWidths[idx], isFirst, isSystemStart);
+          const result = renderMeasure(ctx, V, measure, x, sysWidths[idx], isFirst, isSystemStart, numStrings);
           if (prevResult && idx > 0) {
             const prevM = sysMeasures[idx - 1];
             const lastPrev = prevM.notes[prevM.notes.length - 1];
@@ -547,17 +579,17 @@
     const slots = Math.max(1, measure.notes.length);
     return slots * NOTE_SLOT_W + MEASURE_PAD + (isFirst ? CLEF_W : 0);
   }
-  function renderMeasure(ctx, V, measure, x, width, isFirst, isSystemStart = false) {
+  function renderMeasure(ctx, V, measure, x, width, isFirst, isSystemStart = false, numStrings = 4) {
     const stave = new V.Stave(x, STAVE_Y, width);
     if (isFirst) stave.addClef("bass").addTimeSignature("4/4");
     else if (isSystemStart) stave.addClef("bass");
     stave.setContext(ctx).draw();
-    const tabStave = new V.TabStave(x, TAB_Y, width, { num_lines: NUM_STRINGS });
+    const tabStave = new V.TabStave(x, TAB_Y, width, { numLines: numStrings });
     if (isFirst || isSystemStart) tabStave.addTabGlyph();
     tabStave.setContext(ctx).draw();
     if (measure.notes.length === 0) return { tabStave, staveNotes: [], tabNotes: [] };
     const staveNotes = measure.notes.map((n) => toStaveNote(n, V));
-    const tabNotes = measure.notes.map((n) => toTabNote(n, V));
+    const tabNotes = measure.notes.map((n) => toTabNote(n, V, numStrings));
     const { beats, value } = measure.timeSignature;
     const SOFT = V.Voice.Mode?.SOFT ?? 2;
     const sv = new V.Voice({ num_beats: beats, beat_value: value });
@@ -688,16 +720,16 @@
     if (note.dotted && V.Dot) V.Dot.buildAndAttach([sn], { index: 0 });
     return sn;
   }
-  function toTabNote(note, V) {
+  function toTabNote(note, V, numStrings = 4) {
     if (note.isRest) return new V.GhostNote(note.vexDuration);
     const tn = new V.TabNote({
-      positions: [{ str: NUM_STRINGS - note.string, fret: note.fret }],
+      positions: [{ str: numStrings - note.string, fret: note.fret }],
       duration: note.vexDuration
     });
     if (note.dotted && V.Dot) V.Dot.buildAndAttach([tn], { index: 0 });
     return tn;
   }
-  function attachTapHandler(svg, sysRendered) {
+  function attachTapHandler(svg, sysRendered, numStrings = 4) {
     if (!svg || sysRendered.length === 0) return;
     svg.style.cursor = "pointer";
     let tapStart = null;
@@ -725,13 +757,13 @@
       if (!found || !found.tabStave) return;
       let lineYs;
       try {
-        lineYs = Array.from({ length: NUM_STRINGS }, (_, i) => found.tabStave.getYForLine(i));
+        lineYs = Array.from({ length: numStrings }, (_, i) => found.tabStave.getYForLine(i));
       } catch {
-        lineYs = Array.from({ length: NUM_STRINGS }, (_, i) => TAB_Y + (i + 1) * 13);
+        lineYs = Array.from({ length: numStrings }, (_, i) => TAB_Y + (i + 1) * 13);
       }
       const spacing = lineYs.length > 1 ? lineYs[1] - lineYs[0] : 13;
       const topY = lineYs[0] - spacing;
-      const bottomY = lineYs[NUM_STRINGS - 1] + spacing;
+      const bottomY = lineYs[numStrings - 1] + spacing;
       if (svgY < topY || svgY > bottomY) return;
       let closestIdx = 0, minDist = Infinity;
       lineYs.forEach((y, i) => {
@@ -741,12 +773,17 @@
           closestIdx = i;
         }
       });
-      const ourString = NUM_STRINGS - 1 - closestIdx;
+      const ourString = numStrings - 1 - closestIdx;
       dispatch({ type: "TAP_STRING", payload: { string: ourString } });
     }
   }
 
   // js/ui.js
+  var STRING_LABELS = {
+    4: [{ string: 3, label: "G\u5F26" }, { string: 2, label: "D\u5F26" }, { string: 1, label: "A\u5F26" }, { string: 0, label: "E\u5F26" }],
+    5: [{ string: 4, label: "G\u5F26" }, { string: 3, label: "D\u5F26" }, { string: 2, label: "A\u5F26" }, { string: 1, label: "E\u5F26" }, { string: 0, label: "B\u5F26" }],
+    6: [{ string: 5, label: "C\u5F26" }, { string: 4, label: "G\u5F26" }, { string: 3, label: "D\u5F26" }, { string: 2, label: "A\u5F26" }, { string: 1, label: "E\u5F26" }, { string: 0, label: "B\u5F26" }]
+  };
   var dom = {};
   function init() {
     dom = {
@@ -758,14 +795,37 @@
       btnConfirm: document.getElementById("btn-confirm"),
       btnExportPng: document.getElementById("btn-export-png"),
       btnPrint: document.getElementById("btn-print"),
+      strCountBtns: [...document.querySelectorAll(".str-count-btn[data-strings]")],
+      stringRow: document.getElementById("string-row"),
       durBtns: [...document.querySelectorAll(".dur-btn[data-duration]")],
       numBtns: [...document.querySelectorAll(".num-btn[data-digit]")],
-      techBtns: [...document.querySelectorAll(".tech-btn[data-technique]")],
-      strBtns: [...document.querySelectorAll(".str-btn[data-string]")]
+      techBtns: [...document.querySelectorAll(".tech-btn[data-technique]")]
     };
+    buildStringButtons(4);
     bindEvents();
   }
+  function buildStringButtons(numStrings) {
+    dom.stringRow.innerHTML = "";
+    const labels = STRING_LABELS[numStrings] ?? STRING_LABELS[4];
+    labels.forEach(({ string, label }) => {
+      const btn = document.createElement("button");
+      btn.className = "str-btn";
+      btn.dataset.string = string;
+      btn.textContent = label;
+      btn.addEventListener("click", () => {
+        dispatch({ type: "TAP_STRING", payload: { string: parseInt(btn.dataset.string, 10) } });
+      });
+      dom.stringRow.appendChild(btn);
+    });
+    dom.strBtns = [...dom.stringRow.querySelectorAll(".str-btn")];
+  }
   function bindEvents() {
+    dom.strCountBtns.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const n = parseInt(btn.dataset.strings, 10);
+        dispatch({ type: "SET_NUM_STRINGS", payload: { numStrings: n } });
+      });
+    });
     dom.durBtns.forEach((btn) => {
       btn.addEventListener("click", () => {
         dispatch({ type: "SELECT_DURATION", payload: { duration: btn.dataset.duration } });
@@ -776,11 +836,6 @@
     });
     dom.btnRest.addEventListener("click", () => {
       dispatch({ type: "ADD_REST" });
-    });
-    dom.strBtns.forEach((btn) => {
-      btn.addEventListener("click", () => {
-        dispatch({ type: "TAP_STRING", payload: { string: parseInt(btn.dataset.string, 10) } });
-      });
     });
     dom.numBtns.forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -808,13 +863,25 @@
       alert("PNG\u51FA\u529B\u306F\u8FD1\u65E5\u5B9F\u88C5\u4E88\u5B9A\u3067\u3059");
     });
   }
+  var _lastNumStrings = 4;
   function update(state2) {
     const { input, selection, score } = state2;
+    const numStrings = score.numStrings ?? 4;
+    if (numStrings !== _lastNumStrings) {
+      _lastNumStrings = numStrings;
+      buildStringButtons(numStrings);
+    }
+    updateStrCountButtons(numStrings);
     updateDurationButtons(input);
     updateStringButtons(input);
     updateFretDisplay(input);
     updateTechButtons(selection, score);
     syncTitle(score);
+  }
+  function updateStrCountButtons(numStrings) {
+    dom.strCountBtns.forEach((btn) => {
+      btn.classList.toggle("active", parseInt(btn.dataset.strings, 10) === numStrings);
+    });
   }
   function updateDurationButtons(input) {
     dom.durBtns.forEach((btn) => {

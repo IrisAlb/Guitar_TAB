@@ -1,26 +1,59 @@
 import { dispatch } from './store.js';
 
+// String labels (high → low order for display; index 0 in array = highest string)
+const STRING_LABELS = {
+  4: [{ string: 3, label: 'G弦' }, { string: 2, label: 'D弦' }, { string: 1, label: 'A弦' }, { string: 0, label: 'E弦' }],
+  5: [{ string: 4, label: 'G弦' }, { string: 3, label: 'D弦' }, { string: 2, label: 'A弦' }, { string: 1, label: 'E弦' }, { string: 0, label: 'B弦' }],
+  6: [{ string: 5, label: 'C弦' }, { string: 4, label: 'G弦' }, { string: 3, label: 'D弦' }, { string: 2, label: 'A弦' }, { string: 1, label: 'E弦' }, { string: 0, label: 'B弦' }],
+};
+
 let dom = {};
 
 export function init() {
   dom = {
-    titleInput:   document.getElementById('title-input'),
-    fretDisplay:  document.getElementById('fret-display'),
-    btnDotted:    document.getElementById('btn-dotted'),
-    btnRest:      document.getElementById('btn-rest'),
-    btnBackspace: document.getElementById('btn-backspace'),
-    btnConfirm:   document.getElementById('btn-confirm'),
-    btnExportPng: document.getElementById('btn-export-png'),
-    btnPrint:     document.getElementById('btn-print'),
-    durBtns:      [...document.querySelectorAll('.dur-btn[data-duration]')],
-    numBtns:      [...document.querySelectorAll('.num-btn[data-digit]')],
-    techBtns:     [...document.querySelectorAll('.tech-btn[data-technique]')],
-    strBtns:      [...document.querySelectorAll('.str-btn[data-string]')],
+    titleInput:    document.getElementById('title-input'),
+    fretDisplay:   document.getElementById('fret-display'),
+    btnDotted:     document.getElementById('btn-dotted'),
+    btnRest:       document.getElementById('btn-rest'),
+    btnBackspace:  document.getElementById('btn-backspace'),
+    btnConfirm:    document.getElementById('btn-confirm'),
+    btnExportPng:  document.getElementById('btn-export-png'),
+    btnPrint:      document.getElementById('btn-print'),
+    strCountBtns:  [...document.querySelectorAll('.str-count-btn[data-strings]')],
+    stringRow:     document.getElementById('string-row'),
+    durBtns:       [...document.querySelectorAll('.dur-btn[data-duration]')],
+    numBtns:       [...document.querySelectorAll('.num-btn[data-digit]')],
+    techBtns:      [...document.querySelectorAll('.tech-btn[data-technique]')],
   };
+  buildStringButtons(4);
   bindEvents();
 }
 
+function buildStringButtons(numStrings) {
+  dom.stringRow.innerHTML = '';
+  const labels = STRING_LABELS[numStrings] ?? STRING_LABELS[4];
+  labels.forEach(({ string, label }) => {
+    const btn = document.createElement('button');
+    btn.className = 'str-btn';
+    btn.dataset.string = string;
+    btn.textContent = label;
+    btn.addEventListener('click', () => {
+      dispatch({ type: 'TAP_STRING', payload: { string: parseInt(btn.dataset.string, 10) } });
+    });
+    dom.stringRow.appendChild(btn);
+  });
+  dom.strBtns = [...dom.stringRow.querySelectorAll('.str-btn')];
+}
+
 function bindEvents() {
+  // ── 弦数切り替え ─────────────────────────────
+  dom.strCountBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const n = parseInt(btn.dataset.strings, 10);
+      dispatch({ type: 'SET_NUM_STRINGS', payload: { numStrings: n } });
+    });
+  });
+
   // ── 音符の長さ ──────────────────────────────
   dom.durBtns.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -34,13 +67,6 @@ function bindEvents() {
 
   dom.btnRest.addEventListener('click', () => {
     dispatch({ type: 'ADD_REST' });
-  });
-
-  // ── 弦選択 ──────────────────────────────────
-  dom.strBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      dispatch({ type: 'TAP_STRING', payload: { string: parseInt(btn.dataset.string, 10) } });
-    });
   });
 
   // ── テンキー ────────────────────────────────
@@ -79,14 +105,29 @@ function bindEvents() {
   });
 }
 
+let _lastNumStrings = 4;
+
 export function update(state) {
   const { input, selection, score } = state;
+  const numStrings = score.numStrings ?? 4;
 
+  if (numStrings !== _lastNumStrings) {
+    _lastNumStrings = numStrings;
+    buildStringButtons(numStrings);
+  }
+
+  updateStrCountButtons(numStrings);
   updateDurationButtons(input);
   updateStringButtons(input);
   updateFretDisplay(input);
   updateTechButtons(selection, score);
   syncTitle(score);
+}
+
+function updateStrCountButtons(numStrings) {
+  dom.strCountBtns.forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.strings, 10) === numStrings);
+  });
 }
 
 function updateDurationButtons(input) {
