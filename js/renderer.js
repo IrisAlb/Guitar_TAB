@@ -234,13 +234,14 @@ function renderMeasure(ctx, V, measure, x, width, isFirst, isSystemStart = false
 
   const tabStave = new V.TabStave(x, TAB_Y, width, { numLines: numStrings });
   if (isFirst || isSystemStart) tabStave.addTabGlyph();
+  // Snapshot all SVG text nodes present before tabStave.draw() so we can
+  // identify and hide the newly added tab glyph element(s) after draw.
+  const preDrawTexts = (isFirst || isSystemStart) && activeSvg
+    ? new Set(activeSvg.querySelectorAll('text'))
+    : null;
   tabStave.setContext(ctx).draw();
-
-  // Replace VexFlow's fixed-size sixStringTabClef glyph with a scaled custom label.
-  // addTabGlyph() is kept so VexFlow computes the correct noteStartX for alignment.
-  // After draw(), cover the glyph area and overlay scaled "TAB" text.
   if ((isFirst || isSystemStart) && activeSvg) {
-    overwriteTabLabel(activeSvg, tabStave, numStrings);
+    overwriteTabLabel(activeSvg, tabStave, numStrings, preDrawTexts);
   }
 
   if (measure.notes.length === 0) return { tabStave, staveNotes: [], tabNotes: [] };
@@ -293,21 +294,29 @@ function renderMeasure(ctx, V, measure, x, width, isFirst, isSystemStart = false
   return { tabStave, staveNotes, tabNotes };
 }
 
-// Overlay scaled "TAB" letters on top of VexFlow's sixStringTabClef glyph.
-// addTabGlyph() is kept so VexFlow computes the correct noteStartX for note alignment.
-// We draw only the black letters — no white backgrounds — so cursor highlights and
-// stave lines remain fully visible underneath.
-function overwriteTabLabel(svg, tabStave, numStrings) {
+// Overlay correctly scaled "TAB" letters, hiding VexFlow's always-6-string glyph.
+// addTabGlyph() is retained so VexFlow computes the correct noteStartX.
+// preDrawTexts = Set of text nodes present before tabStave.draw(); any text node
+// NOT in that set was added by draw() and is the glyph we want to suppress.
+function overwriteTabLabel(svg, tabStave, numStrings, preDrawTexts) {
   try {
-    const sx      = tabStave.getX();
-    const snx     = tabStave.getNoteStartX();
-    const clefW   = snx - sx;
-    const topY    = tabStave.getYForLine(0);
-    const botY    = tabStave.getYForLine(numStrings - 1);
-    const staveH  = botY - topY;
+    const sx     = tabStave.getX();
+    const snx    = tabStave.getNoteStartX();
+    const clefW  = snx - sx;
+    const topY   = tabStave.getYForLine(0);
+    const botY   = tabStave.getYForLine(numStrings - 1);
+    const staveH = botY - topY;
     const fontSize = Math.max(9, Math.round(staveH / 2.8));
     const cx = sx + clefW * 0.45;
 
+    // Hide every text element that tabStave.draw() added (the glyph character(s))
+    if (preDrawTexts) {
+      svg.querySelectorAll('text').forEach(el => {
+        if (!preDrawTexts.has(el)) el.setAttribute('visibility', 'hidden');
+      });
+    }
+
+    // Draw our correctly scaled T/A/B with no background
     ['T', 'A', 'B'].forEach((ch, i) => {
       const cy = topY + (staveH * i / 2) + fontSize * 0.35;
       const el = document.createElementNS('http://www.w3.org/2000/svg', 'text');

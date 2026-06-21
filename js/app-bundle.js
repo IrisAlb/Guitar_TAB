@@ -586,9 +586,10 @@
     stave.setContext(ctx).draw();
     const tabStave = new V.TabStave(x, TAB_Y, width, { numLines: numStrings });
     if (isFirst || isSystemStart) tabStave.addTabGlyph();
+    const preDrawTexts = (isFirst || isSystemStart) && activeSvg ? new Set(activeSvg.querySelectorAll("text")) : null;
     tabStave.setContext(ctx).draw();
     if ((isFirst || isSystemStart) && activeSvg) {
-      overwriteTabLabel(activeSvg, tabStave, numStrings);
+      overwriteTabLabel(activeSvg, tabStave, numStrings, preDrawTexts);
     }
     if (measure.notes.length === 0) return { tabStave, staveNotes: [], tabNotes: [] };
     const staveNotes = measure.notes.map((n) => toStaveNote(n, V));
@@ -623,7 +624,7 @@
     }
     return { tabStave, staveNotes, tabNotes };
   }
-  function overwriteTabLabel(svg, tabStave, numStrings) {
+  function overwriteTabLabel(svg, tabStave, numStrings, preDrawTexts) {
     try {
       const sx = tabStave.getX();
       const snx = tabStave.getNoteStartX();
@@ -633,6 +634,11 @@
       const staveH = botY - topY;
       const fontSize = Math.max(9, Math.round(staveH / 2.8));
       const cx = sx + clefW * 0.45;
+      if (preDrawTexts) {
+        svg.querySelectorAll("text").forEach((el) => {
+          if (!preDrawTexts.has(el)) el.setAttribute("visibility", "hidden");
+        });
+      }
       ["T", "A", "B"].forEach((ch, i) => {
         const cy = topY + staveH * i / 2 + fontSize * 0.35;
         const el = document.createElementNS("http://www.w3.org/2000/svg", "text");
