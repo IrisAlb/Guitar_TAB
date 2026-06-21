@@ -870,6 +870,10 @@
     new ResizeObserver(() => render(state.score, state.cursor, state.selection)).observe(_scoreArea);
   }
   window.addEventListener("beforeprint", () => renderPrint(state.score));
+  window.addEventListener("afterprint", () => {
+    const pc = document.getElementById("print-canvas");
+    if (pc) pc.innerHTML = "";
+  });
   window.app = { state, dispatch };
   console.log("%cBass TAB Editor \u2014 Step 4", "font-weight:bold;color:#4a90e2");
 })();

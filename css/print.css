@@ -1,35 +1,36 @@
-@media screen {
-  #print-canvas { display: none; }
+/* This file is loaded with media="print", so all rules apply only during printing. */
+
+#header       { display: none; }
+#input-panel  { display: none; }
+#score-area   { display: none; }
+
+body {
+  height: auto;
+  overflow: visible;
+  background: #fff;
+  margin: 0;
 }
 
-@media print {
-  #header       { display: none; }
-  #input-panel  { display: none; }
-  #score-area   { display: none; }
+#print-canvas {
+  display: block !important;
+  padding: 12mm 10mm;
+  color: #000;
+}
 
-  body          { height: auto; overflow: visible; background: #fff; margin: 0; }
+.print-title {
+  font-size: 16pt;
+  font-weight: bold;
+  text-align: center;
+  margin: 0 0 6mm 0;
+  font-family: serif;
+}
 
-  #print-canvas {
-    display: block;
-    padding: 12mm 10mm;
-    color: #000;
-  }
+.print-row {
+  margin-bottom: 6mm;
+  page-break-inside: avoid;
+}
 
-  .print-title {
-    font-size: 16pt;
-    font-weight: bold;
-    text-align: center;
-    margin: 0 0 6mm 0;
-    font-family: serif;
-  }
-
-  .print-row {
-    margin-bottom: 6mm;
-    page-break-inside: avoid;
-  }
-
-  .print-row svg {
-    display: block;
-    max-width: 100%;
-  }
+.print-row svg {
+  display: block;
+  max-width: 100%;
 }

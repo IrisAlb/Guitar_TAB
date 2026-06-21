@@ -22,6 +22,12 @@ if (_scoreArea && window.ResizeObserver) {
 // Generate multi-system print layout just before the OS print dialog opens
 window.addEventListener('beforeprint', () => renderPrint(state.score));
 
+// Clear print canvas after print dialog is closed to restore normal view
+window.addEventListener('afterprint', () => {
+  const pc = document.getElementById('print-canvas');
+  if (pc) pc.innerHTML = '';
+});
+
 window.app = { state, dispatch };
 
 console.log('%cBass TAB Editor — Step 4', 'font-weight:bold;color:#4a90e2');

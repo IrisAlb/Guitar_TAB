@@ -87,6 +87,9 @@ body {
   display: block;
 }
 
+/* Always hidden on screen; print.css makes it visible during printing */
+#print-canvas { display: none; }
+
 /* ── Input panel ─────────────────────────────────── */
 #input-panel {
   flex: 0 0 auto;
