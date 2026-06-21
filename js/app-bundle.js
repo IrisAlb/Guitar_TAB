@@ -631,37 +631,10 @@
       const topY = tabStave.getYForLine(0);
       const botY = tabStave.getYForLine(numStrings - 1);
       const staveH = botY - topY;
-      const spacing = numStrings > 1 ? staveH / (numStrings - 1) : 13;
       const fontSize = Math.max(9, Math.round(staveH / 2.8));
       const cx = sx + clefW * 0.45;
-      const mkRect = (y, h) => {
-        const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        r.setAttribute("x", sx);
-        r.setAttribute("y", y);
-        r.setAttribute("width", clefW);
-        r.setAttribute("height", h);
-        r.setAttribute("fill", "#fff");
-        r.setAttribute("stroke", "none");
-        svg.appendChild(r);
-      };
-      mkRect(topY - spacing * 2.5, spacing * 2.5 + 2);
-      mkRect(botY + 2, spacing * 2.5 + 50);
       ["T", "A", "B"].forEach((ch, i) => {
         const cy = topY + staveH * i / 2 + fontSize * 0.35;
-        const hs = Math.round(fontSize * 2.5);
-        const halo = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        halo.setAttribute("x", cx);
-        halo.setAttribute("y", cy);
-        halo.setAttribute("text-anchor", "middle");
-        halo.setAttribute("font-family", "serif");
-        halo.setAttribute("font-size", fontSize);
-        halo.setAttribute("font-weight", "bold");
-        halo.setAttribute("fill", "#fff");
-        halo.setAttribute("stroke", "#fff");
-        halo.setAttribute("stroke-width", hs);
-        halo.setAttribute("stroke-linejoin", "round");
-        halo.textContent = ch;
-        svg.appendChild(halo);
         const el = document.createElementNS("http://www.w3.org/2000/svg", "text");
         el.setAttribute("x", cx);
         el.setAttribute("y", cy);
