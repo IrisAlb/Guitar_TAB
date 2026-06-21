@@ -402,7 +402,7 @@
   var CLEF_W = 58;
   var PRINT_W = 720;
   function tabCanvasH(numStrings) {
-    return TAB_Y + numStrings * 13 + 50;
+    return TAB_Y + (numStrings - 1) * 13 + 65;
   }
   var renderedMeasures = [];
   var activeSvg = null;
@@ -586,7 +586,10 @@
     stave.setContext(ctx).draw();
     const tabStave = new V.TabStave(x, TAB_Y, width, { numLines: numStrings });
     if (isFirst || isSystemStart) tabStave.addTabGlyph();
+    const savedTabScale = V.TABLATURE_FONT_SCALE ?? 39;
+    if (isFirst || isSystemStart) V.TABLATURE_FONT_SCALE = Math.round(savedTabScale * (numStrings - 1) / 5);
     tabStave.setContext(ctx).draw();
+    if (isFirst || isSystemStart) V.TABLATURE_FONT_SCALE = savedTabScale;
     if (measure.notes.length === 0) return { tabStave, staveNotes: [], tabNotes: [] };
     const staveNotes = measure.notes.map((n) => toStaveNote(n, V));
     const tabNotes = measure.notes.map((n) => toTabNote(n, V, numStrings));

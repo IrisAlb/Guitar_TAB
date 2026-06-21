@@ -12,8 +12,10 @@ const MEASURE_PAD = 18;
 const CLEF_W      = 58;
 const PRINT_W     = 720;   // A4 usable width (210mm - 20mm margins ≈ 720px)
 
-// TAB stave height grows with string count: ~13px per line + 50px for label/padding
-function tabCanvasH(numStrings) { return TAB_Y + numStrings * 13 + 50; }
+// TAB stave canvas height: grows with string count.
+// The TAB clef glyph (TABLATURE_FONT_SCALE=39) fits ~5-string height;
+// scale proportionally. Extra bottom room = 65px covers stave line padding.
+function tabCanvasH(numStrings) { return TAB_Y + (numStrings - 1) * 13 + 65; }
 
 // Populated each render(); consumed by scrollToCursor
 let renderedMeasures = [];
@@ -232,7 +234,13 @@ function renderMeasure(ctx, V, measure, x, width, isFirst, isSystemStart = false
 
   const tabStave = new V.TabStave(x, TAB_Y, width, { numLines: numStrings });
   if (isFirst || isSystemStart) tabStave.addTabGlyph();
+
+  // Scale the TAB clef glyph proportionally to the stave height.
+  // Default TABLATURE_FONT_SCALE=39 is designed for 6 strings; scale it down for fewer.
+  const savedTabScale = V.TABLATURE_FONT_SCALE ?? 39;
+  if (isFirst || isSystemStart) V.TABLATURE_FONT_SCALE = Math.round(savedTabScale * (numStrings - 1) / 5);
   tabStave.setContext(ctx).draw();
+  if (isFirst || isSystemStart) V.TABLATURE_FONT_SCALE = savedTabScale;
 
   if (measure.notes.length === 0) return { tabStave, staveNotes: [], tabNotes: [] };
 
