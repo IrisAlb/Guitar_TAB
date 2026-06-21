@@ -234,13 +234,14 @@ function renderMeasure(ctx, V, measure, x, width, isFirst, isSystemStart = false
 
   const tabStave = new V.TabStave(x, TAB_Y, width, { numLines: numStrings });
   if (isFirst || isSystemStart) tabStave.addTabGlyph();
-
-  // Scale the TAB clef glyph proportionally to the stave height.
-  // Default TABLATURE_FONT_SCALE=39 is designed for 6 strings; scale it down for fewer.
-  const savedTabScale = V.TABLATURE_FONT_SCALE ?? 39;
-  if (isFirst || isSystemStart) V.TABLATURE_FONT_SCALE = Math.round(savedTabScale * (numStrings - 1) / 5);
   tabStave.setContext(ctx).draw();
-  if (isFirst || isSystemStart) V.TABLATURE_FONT_SCALE = savedTabScale;
+
+  // Replace VexFlow's fixed-size sixStringTabClef glyph with a scaled custom label.
+  // addTabGlyph() is kept so VexFlow computes the correct noteStartX for alignment.
+  // After draw(), cover the glyph area and overlay scaled "TAB" text.
+  if ((isFirst || isSystemStart) && activeSvg) {
+    overwriteTabLabel(activeSvg, tabStave, numStrings);
+  }
 
   if (measure.notes.length === 0) return { tabStave, staveNotes: [], tabNotes: [] };
 
@@ -290,6 +291,58 @@ function renderMeasure(ctx, V, measure, x, width, isFirst, isSystemStart = false
   }
 
   return { tabStave, staveNotes, tabNotes };
+}
+
+// Replace VexFlow's sixStringTabClef (always 6-string sized) with scaled "TAB" text.
+// Keeps the clef in the stave model (for noteStartX alignment) but overwrites visually.
+function overwriteTabLabel(svg, tabStave, numStrings) {
+  try {
+    const sx   = tabStave.getX();
+    const snx  = tabStave.getNoteStartX();    // right edge of the clef area
+    const clefW = snx - sx;
+    const topY  = tabStave.getYForLine(0);
+    const botY  = tabStave.getYForLine(numStrings - 1);
+
+    // White rect covering the entire clef column (hides VexFlow's fixed-size glyph)
+    const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    bg.setAttribute('x',      sx);
+    bg.setAttribute('y',      TAB_Y - 2);
+    bg.setAttribute('width',  clefW);
+    bg.setAttribute('height', botY - TAB_Y + 20);
+    bg.setAttribute('fill',   '#fff');
+    svg.appendChild(bg);
+
+    // Redraw stave lines over the white rect so they're not broken
+    for (let s = 0; s < numStrings; s++) {
+      const ly = tabStave.getYForLine(s);
+      const ln = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      ln.setAttribute('x1',           sx);
+      ln.setAttribute('y1',           ly);
+      ln.setAttribute('x2',           sx + clefW);
+      ln.setAttribute('y2',           ly);
+      ln.setAttribute('stroke',       '#000');
+      ln.setAttribute('stroke-width', '1');
+      svg.appendChild(ln);
+    }
+
+    // Draw scaled "TAB" letters: font size proportional to stave height / 3 letters
+    const staveH   = botY - topY;
+    const fontSize = Math.max(8, Math.round(staveH / 3.0));
+    const cx       = sx + clefW * 0.45;   // center of the label area
+    ['T', 'A', 'B'].forEach((ch, i) => {
+      const cy = topY + (staveH * i / 2) + fontSize * 0.38;
+      const el = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      el.setAttribute('x',           cx);
+      el.setAttribute('y',           cy);
+      el.setAttribute('text-anchor', 'middle');
+      el.setAttribute('font-family', 'serif');
+      el.setAttribute('font-size',   fontSize);
+      el.setAttribute('font-weight', 'bold');
+      el.setAttribute('fill',        '#000');
+      el.textContent = ch;
+      svg.appendChild(el);
+    });
+  } catch (_) {}
 }
 
 function drawTabRestSymbol(svg, note, x, tabStave) {
