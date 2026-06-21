@@ -295,53 +295,56 @@ function renderMeasure(ctx, V, measure, x, width, isFirst, isSystemStart = false
 
 // Replace VexFlow's sixStringTabClef (always 6-string sized) with scaled "TAB" text.
 // Keeps the clef in the stave model (for noteStartX alignment) but overwrites visually.
+// Strategy: white rects only OUTSIDE the stave lines (safe), then per-letter white halos
+// to knock out VexFlow's glyph letters, then black letters on top.
+// VexFlow's original stave lines remain untouched — no redraw, no doubling.
 function overwriteTabLabel(svg, tabStave, numStrings) {
   try {
     const sx      = tabStave.getX();
-    const snx     = tabStave.getNoteStartX();   // right edge of the clef area
+    const snx     = tabStave.getNoteStartX();
     const clefW   = snx - sx;
     const topY    = tabStave.getYForLine(0);
     const botY    = tabStave.getYForLine(numStrings - 1);
-    const spacing = numStrings > 1 ? (botY - topY) / (numStrings - 1) : 13;
+    const staveH  = botY - topY;
+    const spacing = numStrings > 1 ? staveH / (numStrings - 1) : 13;
+    const fontSize = Math.max(9, Math.round(staveH / 2.8));
+    const cx = sx + clefW * 0.45;
 
-    // White rect covering only the glyph area — no stroke to avoid visible border
-    const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    bg.setAttribute('x',            sx);
-    bg.setAttribute('y',            topY - spacing);
-    bg.setAttribute('width',        clefW);
-    bg.setAttribute('height',       botY - topY + spacing * 2);
-    bg.setAttribute('fill',         '#fff');
-    bg.setAttribute('stroke',       'none');
-    bg.setAttribute('stroke-width', '0');
-    svg.appendChild(bg);
+    const mkRect = (y, h) => {
+      const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      r.setAttribute('x', sx);        r.setAttribute('y', y);
+      r.setAttribute('width', clefW); r.setAttribute('height', h);
+      r.setAttribute('fill', '#fff'); r.setAttribute('stroke', 'none');
+      svg.appendChild(r);
+    };
 
-    // Redraw stave lines over the white rect so they're not broken
-    for (let s = 0; s < numStrings; s++) {
-      const ly = tabStave.getYForLine(s);
-      const ln = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-      ln.setAttribute('x1',           sx);
-      ln.setAttribute('y1',           ly);
-      ln.setAttribute('x2',           sx + clefW);
-      ln.setAttribute('y2',           ly);
-      ln.setAttribute('stroke',       '#000');
-      ln.setAttribute('stroke-width', '1');
-      svg.appendChild(ln);
-    }
+    // Above first stave line — no stave lines here, white rect is safe
+    mkRect(topY - spacing * 2.5, spacing * 2.5 + 2);
+    // Below last stave line — covers VexFlow's "D" decoration and glyph tail
+    mkRect(botY + 2, spacing * 2.5 + 50);
 
-    // Draw scaled "TAB" letters: font size proportional to stave height / 3 letters
-    const staveH   = botY - topY;
-    const fontSize = Math.max(8, Math.round(staveH / 3.0));
-    const cx       = sx + clefW * 0.45;   // center of the label area
+    // Per-letter: thick white halo knocks out VexFlow's glyph letter at that position,
+    // then black letter on top. No redrawing of stave lines needed.
     ['T', 'A', 'B'].forEach((ch, i) => {
-      const cy = topY + (staveH * i / 2) + fontSize * 0.38;
+      const cy = topY + (staveH * i / 2) + fontSize * 0.35;
+      const hs = Math.round(fontSize * 2.5);   // halo stroke radius
+
+      const halo = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      halo.setAttribute('x', cx);              halo.setAttribute('y', cy);
+      halo.setAttribute('text-anchor', 'middle');
+      halo.setAttribute('font-family', 'serif'); halo.setAttribute('font-size', fontSize);
+      halo.setAttribute('font-weight', 'bold');
+      halo.setAttribute('fill', '#fff');
+      halo.setAttribute('stroke', '#fff');      halo.setAttribute('stroke-width', hs);
+      halo.setAttribute('stroke-linejoin', 'round');
+      halo.textContent = ch;
+      svg.appendChild(halo);
+
       const el = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      el.setAttribute('x',           cx);
-      el.setAttribute('y',           cy);
+      el.setAttribute('x', cx);                el.setAttribute('y', cy);
       el.setAttribute('text-anchor', 'middle');
-      el.setAttribute('font-family', 'serif');
-      el.setAttribute('font-size',   fontSize);
-      el.setAttribute('font-weight', 'bold');
-      el.setAttribute('fill',        '#000');
+      el.setAttribute('font-family', 'serif');  el.setAttribute('font-size', fontSize);
+      el.setAttribute('font-weight', 'bold');   el.setAttribute('fill', '#000');
       el.textContent = ch;
       svg.appendChild(el);
     });
