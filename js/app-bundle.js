@@ -402,7 +402,7 @@
   var CLEF_W = 58;
   var PRINT_W = 720;
   function tabCanvasH(numStrings) {
-    return TAB_Y + (numStrings - 1) * 13 + 65;
+    return TAB_Y + (numStrings - 1) * 13 + 105;
   }
   var renderedMeasures = [];
   var activeSvg = null;
@@ -622,7 +622,7 @@
         }
       });
     }
-    if (activeSvg) drawTabDurations(activeSvg, measure, tabNotes, tabStave, numStrings);
+    if (activeSvg) drawTabDurations(activeSvg, measure, tabNotes, staveNotes, tabStave, numStrings);
     return { tabStave, staveNotes, tabNotes };
   }
   function overwriteTabLabel(svg, tabStave, numStrings, preDrawTexts) {
@@ -765,34 +765,41 @@
     if (note.dotted && V.Dot) V.Dot.buildAndAttach([tn], { index: 0 });
     return tn;
   }
-  function drawTabDurations(svg, measure, tabNotes, tabStave, numStrings) {
+  function drawTabDurations(svg, measure, tabNotes, staveNotes, tabStave, numStrings) {
     if (!svg || !measure.notes.length) return;
+    const topY = tabStave.getYForLine(0);
     const botY = tabStave.getYForLine(numStrings - 1);
-    const STEM_H = 28;
+    const lineGap = numStrings > 1 ? (botY - topY) / (numStrings - 1) : 13;
+    const STEM_H = 32;
+    const STEM_BOT = botY + STEM_H;
     const BW = 5;
     const BGAP = 3;
     const BEAT = 480;
     let tick = 0;
     const items = measure.notes.map((note, i) => {
-      let x = null;
+      let x = null, stemTopY = botY + lineGap * 0.5;
       if (!note.isRest) {
         try {
-          x = tabNotes[i].getAbsoluteX();
+          x = staveNotes[i].getAbsoluteX();
+        } catch (_) {
+        }
+        const lineIdx = numStrings - 1 - note.string;
+        try {
+          stemTopY = tabStave.getYForLine(lineIdx) + lineGap * 0.55;
         } catch (_) {
         }
       }
-      const item = { note, x, tick };
+      const item = { note, x, stemTopY, tick };
       tick += note.ticks;
       return item;
     });
-    const stemBot = botY + STEM_H;
-    items.forEach(({ note, x }) => {
+    items.forEach(({ note, x, stemTopY }) => {
       if (note.isRest || note.duration === "w" || x === null) return;
       const ln = document.createElementNS("http://www.w3.org/2000/svg", "line");
       ln.setAttribute("x1", x);
-      ln.setAttribute("y1", botY + 1);
+      ln.setAttribute("y1", stemTopY);
       ln.setAttribute("x2", x);
-      ln.setAttribute("y2", stemBot);
+      ln.setAttribute("y2", STEM_BOT);
       ln.setAttribute("stroke", "#000");
       ln.setAttribute("stroke-width", "1.5");
       svg.appendChild(ln);
@@ -817,7 +824,7 @@
       cur.push({ x, dur: note.duration });
     });
     if (cur.length) groups.push(cur);
-    const beamY = stemBot - BW;
+    const beamY = STEM_BOT - BW;
     const mkRect = (x1, x2, y, h) => {
       const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
       r.setAttribute("x", x1 - 0.75);
@@ -834,7 +841,7 @@
           const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
           p.setAttribute(
             "d",
-            `M ${x},${stemBot + dy} C ${x + 11},${stemBot + dy + 5} ${x + 9},${stemBot + dy + 11} ${x + 3},${stemBot + dy + 14}`
+            `M ${x},${STEM_BOT + dy} C ${x + 11},${STEM_BOT + dy + 5} ${x + 9},${STEM_BOT + dy + 11} ${x + 3},${STEM_BOT + dy + 14}`
           );
           p.setAttribute("stroke", "#000");
           p.setAttribute("stroke-width", "1.5");

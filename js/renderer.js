@@ -15,7 +15,7 @@ const PRINT_W     = 720;   // A4 usable width (210mm - 20mm margins ≈ 720px)
 // TAB stave canvas height: grows with string count.
 // The TAB clef glyph (TABLATURE_FONT_SCALE=39) fits ~5-string height;
 // scale proportionally. Extra bottom room = 65px covers stave line padding.
-function tabCanvasH(numStrings) { return TAB_Y + (numStrings - 1) * 13 + 65; }
+function tabCanvasH(numStrings) { return TAB_Y + (numStrings - 1) * 13 + 105; }
 
 // Populated each render(); consumed by scrollToCursor
 let renderedMeasures = [];
@@ -293,7 +293,7 @@ function renderMeasure(ctx, V, measure, x, width, isFirst, isSystemStart = false
 
   // Draw stems, beams, and flags on TAB stave manually (VexFlow stem rendering
   // uses a hardcoded 6-string baseline that misaligns for 4/5-string staves)
-  if (activeSvg) drawTabDurations(activeSvg, measure, tabNotes, tabStave, numStrings);
+  if (activeSvg) drawTabDurations(activeSvg, measure, tabNotes, staveNotes, tabStave, numStrings);
 
   return { tabStave, staveNotes, tabNotes };
 }
@@ -452,42 +452,50 @@ function toTabNote(note, V, numStrings = 4) {
 
 // ── Manual stem/beam/flag drawing for TAB stave ──────────────────────────
 // VexFlow's TabNote stem rendering uses a hardcoded 6-string baseline offset,
-// causing disconnected stems on 4/5-string staves. We skip VexFlow stems
-// entirely and draw our own from the bottom stave line downward.
-function drawTabDurations(svg, measure, tabNotes, tabStave, numStrings) {
+// causing disconnected stems on 4/5-string staves. We draw our own:
+//   - X positions come from staveNotes (reliable after Formatter.format)
+//   - Stem top = just below the fret number's string line ("数字の直下")
+//   - Stem bottom = fixed baseline below the bottom stave line
+function drawTabDurations(svg, measure, tabNotes, staveNotes, tabStave, numStrings) {
   if (!svg || !measure.notes.length) return;
 
-  const botY   = tabStave.getYForLine(numStrings - 1);
-  const STEM_H = 28;   // stem length below the bottom stave line
-  const BW     = 5;    // beam bar height
-  const BGAP   = 3;    // gap between double beam bars (16th)
-  const BEAT   = 480;  // ticks per quarter note
+  const topY    = tabStave.getYForLine(0);
+  const botY    = tabStave.getYForLine(numStrings - 1);
+  const lineGap = numStrings > 1 ? (botY - topY) / (numStrings - 1) : 13;
+  const STEM_H  = 32;      // pixels below the bottom stave line where stems end
+  const STEM_BOT = botY + STEM_H;
+  const BW      = 5;       // beam bar height
+  const BGAP    = 3;       // gap between double beam bars (16th notes)
+  const BEAT    = 480;     // ticks per quarter note
 
   let tick = 0;
   const items = measure.notes.map((note, i) => {
-    let x = null;
+    let x = null, stemTopY = botY + lineGap * 0.5;
     if (!note.isRest) {
-      try { x = tabNotes[i].getAbsoluteX(); } catch (_) {}
+      // Use staveNotes X — aligned with tabNotes by Formatter and more reliable
+      try { x = staveNotes[i].getAbsoluteX(); } catch (_) {}
+      // Stem starts directly below the fret number (its string line)
+      // model.string: 0 = lowest string = bottom stave line (numStrings-1)
+      const lineIdx = numStrings - 1 - note.string;
+      try { stemTopY = tabStave.getYForLine(lineIdx) + lineGap * 0.55; } catch (_) {}
     }
-    const item = { note, x, tick };
+    const item = { note, x, stemTopY, tick };
     tick += note.ticks;
     return item;
   });
 
-  const stemBot = botY + STEM_H;
-
   // Draw stems for every pitched non-whole note
-  items.forEach(({ note, x }) => {
+  items.forEach(({ note, x, stemTopY }) => {
     if (note.isRest || note.duration === 'w' || x === null) return;
     const ln = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    ln.setAttribute('x1', x);  ln.setAttribute('y1', botY + 1);
-    ln.setAttribute('x2', x);  ln.setAttribute('y2', stemBot);
+    ln.setAttribute('x1', x);  ln.setAttribute('y1', stemTopY);
+    ln.setAttribute('x2', x);  ln.setAttribute('y2', STEM_BOT);
     ln.setAttribute('stroke', '#000');
     ln.setAttribute('stroke-width', '1.5');
     svg.appendChild(ln);
   });
 
-  // Collect beam groups: consecutive 8th or 16th notes sharing a beat
+  // Collect beam groups: consecutive 8th or 16th notes sharing the same beat
   const groups = [];
   let cur = [], curBeat = -1;
   items.forEach(({ note, x, tick: nt }) => {
@@ -502,7 +510,7 @@ function drawTabDurations(svg, measure, tabNotes, tabStave, numStrings) {
   });
   if (cur.length) groups.push(cur);
 
-  const beamY = stemBot - BW;
+  const beamY = STEM_BOT - BW;
 
   const mkRect = (x1, x2, y, h) => {
     const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -516,12 +524,11 @@ function drawTabDurations(svg, measure, tabNotes, tabStave, numStrings) {
 
   groups.forEach(group => {
     if (group.length === 1) {
-      // Isolated note: draw flag(s)
       const { x, dur } = group[0];
       const mkFlag = (dy) => {
         const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         p.setAttribute('d',
-          `M ${x},${stemBot + dy} C ${x + 11},${stemBot + dy + 5} ${x + 9},${stemBot + dy + 11} ${x + 3},${stemBot + dy + 14}`);
+          `M ${x},${STEM_BOT + dy} C ${x+11},${STEM_BOT+dy+5} ${x+9},${STEM_BOT+dy+11} ${x+3},${STEM_BOT+dy+14}`);
         p.setAttribute('stroke', '#000');
         p.setAttribute('stroke-width', '1.5');
         p.setAttribute('fill', 'none');
@@ -530,13 +537,11 @@ function drawTabDurations(svg, measure, tabNotes, tabStave, numStrings) {
       mkFlag(0);
       if (dur === '16') mkFlag(-(BW + BGAP));
     } else {
-      // Beamed group: primary beam spans full group
       const fx = group[0].x, lx = group[group.length - 1].x;
       mkRect(fx, lx, beamY, BW);
-      // Secondary beam for consecutive 16th-note runs
       let run = [];
       const flush = () => {
-        if (run.length >= 2) mkRect(run[0].x, run[run.length - 1].x, beamY - BW - BGAP, BW);
+        if (run.length >= 2) mkRect(run[0].x, run[run.length-1].x, beamY - BW - BGAP, BW);
         run = [];
       };
       group.forEach(n => (n.dur === '16' ? run.push(n) : flush()));
