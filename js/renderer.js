@@ -210,7 +210,7 @@ function scrollToCursor(cursor) {
   if (!cm || !cm.rowDiv) return;
 
   const rowTop = cm.rowDiv.offsetTop;
-  const rowH   = cm.rowDiv.clientHeight || CANVAS_H;
+  const rowH   = cm.rowDiv.clientHeight || cm.rowDiv.getBoundingClientRect().height || 250;
   const areaH  = scoreArea.clientHeight;
   const scrollT = scoreArea.scrollTop;
 
@@ -445,7 +445,7 @@ function toTabNote(note, V, numStrings = 4) {
   const tn = new V.TabNote({
     positions: [{ str: numStrings - note.string, fret: note.fret }],
     duration: note.vexDuration,
-    stem_direction: -1,   // stem goes down, below TAB stave
+    stem_direction: 1,    // stem goes up (avoids VexFlow 6-line baseline offset bug)
   });
   if (note.dotted && V.Dot) V.Dot.buildAndAttach([tn], { index: 0 });
   return tn;
