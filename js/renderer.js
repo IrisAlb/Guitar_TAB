@@ -273,10 +273,6 @@ function renderMeasure(ctx, V, measure, x, width, isFirst, isSystemStart = false
   V.Beam.generateBeams(staveNotes.filter(n => !n.isRest()))
     .forEach(b => b.setContext(ctx).draw());
 
-  // Beams on TAB stave (mirrors stave beaming; exclude rests = GhostNotes)
-  V.Beam.generateBeams(tabNotes.filter((_, i) => !measure.notes[i].isRest))
-    .forEach(b => b.setContext(ctx).draw());
-
   // Draw intra-measure ties
   measure.notes.forEach((note, i) => {
     if (note.tiedToNext && !note.isRest && i + 1 < measure.notes.length && !measure.notes[i + 1].isRest) {
@@ -294,6 +290,10 @@ function renderMeasure(ctx, V, measure, x, width, isFirst, isSystemStart = false
       } catch (_) {}
     });
   }
+
+  // Draw stems, beams, and flags on TAB stave manually (VexFlow stem rendering
+  // uses a hardcoded 6-string baseline that misaligns for 4/5-string staves)
+  if (activeSvg) drawTabDurations(activeSvg, measure, tabNotes, tabStave, numStrings);
 
   return { tabStave, staveNotes, tabNotes };
 }
@@ -445,10 +445,104 @@ function toTabNote(note, V, numStrings = 4) {
   const tn = new V.TabNote({
     positions: [{ str: numStrings - note.string, fret: note.fret }],
     duration: note.vexDuration,
-    stem_direction: 1,    // stem goes up (avoids VexFlow 6-line baseline offset bug)
   });
   if (note.dotted && V.Dot) V.Dot.buildAndAttach([tn], { index: 0 });
   return tn;
+}
+
+// ── Manual stem/beam/flag drawing for TAB stave ──────────────────────────
+// VexFlow's TabNote stem rendering uses a hardcoded 6-string baseline offset,
+// causing disconnected stems on 4/5-string staves. We skip VexFlow stems
+// entirely and draw our own from the bottom stave line downward.
+function drawTabDurations(svg, measure, tabNotes, tabStave, numStrings) {
+  if (!svg || !measure.notes.length) return;
+
+  const botY   = tabStave.getYForLine(numStrings - 1);
+  const STEM_H = 28;   // stem length below the bottom stave line
+  const BW     = 5;    // beam bar height
+  const BGAP   = 3;    // gap between double beam bars (16th)
+  const BEAT   = 480;  // ticks per quarter note
+
+  let tick = 0;
+  const items = measure.notes.map((note, i) => {
+    let x = null;
+    if (!note.isRest) {
+      try { x = tabNotes[i].getAbsoluteX(); } catch (_) {}
+    }
+    const item = { note, x, tick };
+    tick += note.ticks;
+    return item;
+  });
+
+  const stemBot = botY + STEM_H;
+
+  // Draw stems for every pitched non-whole note
+  items.forEach(({ note, x }) => {
+    if (note.isRest || note.duration === 'w' || x === null) return;
+    const ln = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    ln.setAttribute('x1', x);  ln.setAttribute('y1', botY + 1);
+    ln.setAttribute('x2', x);  ln.setAttribute('y2', stemBot);
+    ln.setAttribute('stroke', '#000');
+    ln.setAttribute('stroke-width', '1.5');
+    svg.appendChild(ln);
+  });
+
+  // Collect beam groups: consecutive 8th or 16th notes sharing a beat
+  const groups = [];
+  let cur = [], curBeat = -1;
+  items.forEach(({ note, x, tick: nt }) => {
+    const b = Math.floor(nt / BEAT);
+    if (note.isRest || x === null || (note.duration !== '8' && note.duration !== '16')) {
+      if (cur.length) { groups.push(cur); cur = []; curBeat = -1; }
+      return;
+    }
+    if (curBeat !== -1 && b !== curBeat) { groups.push(cur); cur = []; }
+    curBeat = b;
+    cur.push({ x, dur: note.duration });
+  });
+  if (cur.length) groups.push(cur);
+
+  const beamY = stemBot - BW;
+
+  const mkRect = (x1, x2, y, h) => {
+    const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    r.setAttribute('x',      x1 - 0.75);
+    r.setAttribute('y',      y);
+    r.setAttribute('width',  x2 - x1 + 1.5);
+    r.setAttribute('height', h);
+    r.setAttribute('fill',   '#000');
+    svg.appendChild(r);
+  };
+
+  groups.forEach(group => {
+    if (group.length === 1) {
+      // Isolated note: draw flag(s)
+      const { x, dur } = group[0];
+      const mkFlag = (dy) => {
+        const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        p.setAttribute('d',
+          `M ${x},${stemBot + dy} C ${x + 11},${stemBot + dy + 5} ${x + 9},${stemBot + dy + 11} ${x + 3},${stemBot + dy + 14}`);
+        p.setAttribute('stroke', '#000');
+        p.setAttribute('stroke-width', '1.5');
+        p.setAttribute('fill', 'none');
+        svg.appendChild(p);
+      };
+      mkFlag(0);
+      if (dur === '16') mkFlag(-(BW + BGAP));
+    } else {
+      // Beamed group: primary beam spans full group
+      const fx = group[0].x, lx = group[group.length - 1].x;
+      mkRect(fx, lx, beamY, BW);
+      // Secondary beam for consecutive 16th-note runs
+      let run = [];
+      const flush = () => {
+        if (run.length >= 2) mkRect(run[0].x, run[run.length - 1].x, beamY - BW - BGAP, BW);
+        run = [];
+      };
+      group.forEach(n => (n.dur === '16' ? run.push(n) : flush()));
+      flush();
+    }
+  });
 }
 
 // ── Tap handler: attached per system SVG ─────────────────────────────────
