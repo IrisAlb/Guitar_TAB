@@ -607,6 +607,7 @@
     sv.draw(ctx, stave);
     tv.draw(ctx, tabStave);
     V.Beam.generateBeams(staveNotes.filter((n) => !n.isRest())).forEach((b) => b.setContext(ctx).draw());
+    V.Beam.generateBeams(tabNotes.filter((_, i) => !measure.notes[i].isRest)).forEach((b) => b.setContext(ctx).draw());
     measure.notes.forEach((note, i) => {
       if (note.tiedToNext && !note.isRest && i + 1 < measure.notes.length && !measure.notes[i + 1].isRest) {
         drawTie(ctx, V, staveNotes[i], staveNotes[i + 1], tabNotes[i], tabNotes[i + 1]);
@@ -759,7 +760,9 @@
     if (note.isRest) return new V.GhostNote(note.vexDuration);
     const tn = new V.TabNote({
       positions: [{ str: numStrings - note.string, fret: note.fret }],
-      duration: note.vexDuration
+      duration: note.vexDuration,
+      stem_direction: -1
+      // stem goes down, below TAB stave
     });
     if (note.dotted && V.Dot) V.Dot.buildAndAttach([tn], { index: 0 });
     return tn;

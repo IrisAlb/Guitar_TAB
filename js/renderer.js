@@ -273,6 +273,10 @@ function renderMeasure(ctx, V, measure, x, width, isFirst, isSystemStart = false
   V.Beam.generateBeams(staveNotes.filter(n => !n.isRest()))
     .forEach(b => b.setContext(ctx).draw());
 
+  // Beams on TAB stave (mirrors stave beaming; exclude rests = GhostNotes)
+  V.Beam.generateBeams(tabNotes.filter((_, i) => !measure.notes[i].isRest))
+    .forEach(b => b.setContext(ctx).draw());
+
   // Draw intra-measure ties
   measure.notes.forEach((note, i) => {
     if (note.tiedToNext && !note.isRest && i + 1 < measure.notes.length && !measure.notes[i + 1].isRest) {
@@ -441,6 +445,7 @@ function toTabNote(note, V, numStrings = 4) {
   const tn = new V.TabNote({
     positions: [{ str: numStrings - note.string, fret: note.fret }],
     duration: note.vexDuration,
+    stem_direction: -1,   // stem goes down, below TAB stave
   });
   if (note.dotted && V.Dot) V.Dot.buildAndAttach([tn], { index: 0 });
   return tn;
